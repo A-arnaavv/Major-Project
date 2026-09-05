@@ -34,7 +34,7 @@ def evaluate_answer(
     )
 
     interaction = client.interactions.create(
-        model="gemini-3.7-flash",
+        model="gemini-3.1-flash-lite",
         input=prompt,
         response_format={
             "type": "text",
