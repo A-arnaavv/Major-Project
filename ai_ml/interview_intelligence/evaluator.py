@@ -1,4 +1,22 @@
+import os
+
+from dotenv import load_dotenv
+from google import genai
+
 from ai_ml.interview_intelligence.schemas import EvaluationResult
+from ai_ml.interview_intelligence.prompts import EVALUATION_PROMPT
+
+
+load_dotenv()
+
+api_key = os.getenv("GEMINI_API_KEY")
+
+if not api_key:
+    raise ValueError(
+        "GEMINI_API_KEY not found. Add it to your .env file."
+    )
+
+client = genai.Client(api_key=api_key)
 
 
 def evaluate_answer(
@@ -8,28 +26,23 @@ def evaluate_answer(
     difficulty: str
 ) -> EvaluationResult:
 
-    # Mock evaluator for initial development.
-    # This will be replaced with an actual LLM call.
+    prompt = EVALUATION_PROMPT.format(
+        question=question,
+        candidate_answer=candidate_answer,
+        expected_concepts=expected_concepts,
+        difficulty=difficulty
+    )
 
-    return EvaluationResult(
-        technical_accuracy=7,
-        relevance=8,
-        clarity=8,
-        completeness=6,
-        overall_score=7.25,
-        strengths=[
-            "The candidate explained the core concept correctly."
-        ],
-        weaknesses=[
-            "The answer could contain more technical detail."
-        ],
-        feedback=(
-            "The answer is correct and relevant, but it should include "
-            "additional technical details and an example."
-        ),
-        improved_answer=(
-            "A stronger answer would define the concept, explain why it "
-            "occurs, describe its impact, and provide an example."
-        ),
-        next_difficulty="harder"
+    interaction = client.interactions.create(
+        model="gemini-3.7-flash",
+        input=prompt,
+        response_format={
+            "type": "text",
+            "mime_type": "application/json",
+            "schema": EvaluationResult.model_json_schema()
+        },
+    )
+
+    return EvaluationResult.model_validate_json(
+        interaction.output_text
     )

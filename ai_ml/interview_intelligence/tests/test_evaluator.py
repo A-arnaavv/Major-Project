@@ -1,6 +1,5 @@
 from ai_ml.interview_intelligence.evaluator import evaluate_answer
 
-
 result = evaluate_answer(
     question="What is overfitting in machine learning?",
     candidate_answer=(
