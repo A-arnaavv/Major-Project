@@ -15,17 +15,10 @@ for i in range(3):
     print(f"\nQuestion {i + 1}:")
     print(generated.question)
 
-    # For development only.
-    print("\nExpected concepts:")
-    for concept in generated.expected_concepts:
-        print("-", concept)
-
     candidate_answer = input("\nYour answer: ")
 
     result = session.submit_answer(
-        question=generated.question,
-        candidate_answer=candidate_answer,
-        expected_concepts=generated.expected_concepts
+        candidate_answer=candidate_answer
     )
 
     evaluation = result["evaluation"]
@@ -51,28 +44,36 @@ print("\n===== INTERVIEW COMPLETED =====")
 
 report = session.get_final_report()
 
-print("\n===== FINAL REPORT =====")
-
+print("\n===== NUMERICAL REPORT =====")
 print("Total Questions:", report["total_questions"])
 print("Average Score:", report["average_score"])
-print(
-    "Technical Accuracy:",
-    report["average_technical_accuracy"]
-)
-print(
-    "Relevance:",
-    report["average_relevance"]
-)
-print(
-    "Clarity:",
-    report["average_clarity"]
-)
-print(
-    "Completeness:",
-    report["average_completeness"]
-)
+print("Technical Accuracy:", report["average_technical_accuracy"])
+print("Relevance:", report["average_relevance"])
+print("Clarity:", report["average_clarity"])
+print("Completeness:", report["average_completeness"])
 
-print("\nWeaknesses:")
 
-for weakness in report["weaknesses"]:
-    print("-", weakness)
+print("\n===== AI PERFORMANCE SUMMARY =====")
+
+summary = session.get_ai_performance_summary()
+
+print("\nOverall Performance:")
+print(summary.overall_performance)
+
+print("\nStrong Areas:")
+for area in summary.strong_areas:
+    print("-", area)
+
+print("\nWeak Areas:")
+for area in summary.weak_areas:
+    print("-", area)
+
+print("\nRecommended Topics:")
+for index, topic in enumerate(
+    summary.recommended_topics,
+    start=1
+):
+    print(f"{index}. {topic}")
+
+print("\nFinal Feedback:")
+print(summary.final_feedback)

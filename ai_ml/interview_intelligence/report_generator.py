@@ -13,8 +13,9 @@ def generate_final_report(
             "average_relevance": 0,
             "average_clarity": 0,
             "average_completeness": 0,
+            "topic_performance": {},
             "strengths": [],
-            "weaknesses": [],
+            "weaknesses": []
         }
 
     total_questions = len(history)
@@ -28,8 +29,11 @@ def generate_final_report(
     strengths = []
     weaknesses = []
 
+    topic_scores = {}
+
     for record in history:
         evaluation = record["evaluation"]
+        topic = record.get("topic", "General")
 
         total_score += evaluation["overall_score"]
         total_technical += evaluation["technical_accuracy"]
@@ -40,30 +44,46 @@ def generate_final_report(
         strengths.extend(evaluation["strengths"])
         weaknesses.extend(evaluation["weaknesses"])
 
+        if topic not in topic_scores:
+            topic_scores[topic] = {
+                "total_score": 0,
+                "questions": 0
+            }
+
+        topic_scores[topic]["total_score"] += evaluation["overall_score"]
+        topic_scores[topic]["questions"] += 1
+
+    topic_performance = {}
+
+    for topic, data in topic_scores.items():
+        topic_performance[topic] = round(
+            data["total_score"] / data["questions"],
+            2
+        )
+
     return {
         "total_questions": total_questions,
-
         "average_score": round(
-            total_score / total_questions, 2
+            total_score / total_questions,
+            2
         ),
-
         "average_technical_accuracy": round(
-            total_technical / total_questions, 2
+            total_technical / total_questions,
+            2
         ),
-
         "average_relevance": round(
-            total_relevance / total_questions, 2
+            total_relevance / total_questions,
+            2
         ),
-
         "average_clarity": round(
-            total_clarity / total_questions, 2
+            total_clarity / total_questions,
+            2
         ),
-
         "average_completeness": round(
-            total_completeness / total_questions, 2
+            total_completeness / total_questions,
+            2
         ),
-
+        "topic_performance": topic_performance,
         "strengths": strengths,
-
         "weaknesses": weaknesses
     }
