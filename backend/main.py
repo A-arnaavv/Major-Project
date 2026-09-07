@@ -8,6 +8,7 @@ from ai_ml.interview_intelligence.analytics_exporter import (
     export_question_records,
     export_interview_summary,
 )
+from ai_ml.interview_intelligence.config import LLM_MODE
 from backend.session_store import session_store
 
 
@@ -45,6 +46,16 @@ def root():
     return {
         "status": "running",
         "service": "Interview Intelligence API",
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy",
+        "service": "Interview Intelligence API",
+        "version": "0.1.0",
+        "llm_mode": LLM_MODE,
     }
 
 

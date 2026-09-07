@@ -377,3 +377,15 @@ def test_answer_missing_candidate_answer():
     )
 
     assert response.status_code == 422
+
+def test_health_endpoint():
+    response = client.get("/health")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["status"] == "healthy"
+    assert data["service"] == "Interview Intelligence API"
+    assert data["version"] == "0.1.0"
+    assert data["llm_mode"] in {"mock", "real"}
