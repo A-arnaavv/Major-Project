@@ -15,6 +15,7 @@ for i in range(3):
     print(f"\nQuestion {i + 1}:")
     print(generated.question)
 
+
     candidate_answer = input("\nYour answer: ")
 
     result = session.submit_answer(
@@ -52,6 +53,10 @@ print("Relevance:", report["average_relevance"])
 print("Clarity:", report["average_clarity"])
 print("Completeness:", report["average_completeness"])
 
+print("\nSubtopic Performance:")
+
+for subtopic, score in report["subtopic_performance"].items():
+    print(f"- {subtopic}: {score}/10")
 
 print("\n===== AI PERFORMANCE SUMMARY =====")
 
@@ -74,6 +79,26 @@ for index, topic in enumerate(
     start=1
 ):
     print(f"{index}. {topic}")
+
+learning_plan = session.get_learning_plan()
+
+print("\n===== PERSONALIZED LEARNING PLAN =====")
+
+for item in learning_plan:
+    print(f"\nPriority {item['priority']}:")
+    print("Topic:", item["subtopic"])
+    print(
+        "Current Score:",
+        f"{item['current_score']}/10"
+    )
+    print(
+        "Performance Level:",
+        item["performance_level"]
+    )
+    print(
+        "Recommended Action:",
+        item["recommended_action"]
+    )
 
 print("\nFinal Feedback:")
 print(summary.final_feedback)

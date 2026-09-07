@@ -13,6 +13,11 @@ client = genai.Client(
 
 MODEL_NAME = os.getenv("GEMINI_MODEL")
 
+if not MODEL_NAME:
+    raise ValueError(
+        "GEMINI_MODEL not found. Add it to your .env file."
+    )
+
 
 class PerformanceSummary(BaseModel):
     overall_performance: str
@@ -40,8 +45,11 @@ def generate_performance_summary(
     for record in history:
         interview_data.append({
             "question": record["question"],
+            "topic": record.get("topic", "General"),
+            "subtopic": record.get("subtopic", "General"),
             "difficulty": record["difficulty"],
             "score": record["evaluation"]["overall_score"],
+            "technical_accuracy": record["evaluation"]["technical_accuracy"],
             "strengths": record["evaluation"]["strengths"],
             "weaknesses": record["evaluation"]["weaknesses"]
         })

@@ -20,6 +20,7 @@ class GeneratedQuestion(BaseModel):
     expected_concepts: List[str]
     difficulty: str
     topic: str
+    subtopic: str
 
 
 def generate_question(
@@ -31,26 +32,39 @@ def generate_question(
     previous_questions = previous_questions or []
 
     prompt = f"""
-You are a technical interviewer.
+        You are a technical interviewer.
 
-Generate ONE interview question.
+        Generate ONE interview question.
 
-Topic:
-{topic}
+        Main Topic:
+        {topic}
 
-Difficulty:
-{difficulty}
+        Difficulty:
+        {difficulty}
 
-Previously asked questions:
-{previous_questions}
+        Previously asked questions:
+        {previous_questions}
 
-Requirements:
-- Do not repeat previous questions.
-- The question must match the requested difficulty.
-- Keep the question concise and interview-appropriate.
-- Provide 3 to 6 expected concepts that a strong answer should cover.
-"""
+        Requirements:
+        - Do not repeat previous questions.
+        - The question must match the requested difficulty.
+        - Keep the question concise and interview-appropriate.
+        - Provide 3 to 6 expected concepts that a strong answer should cover.
+        - Keep the main topic as the provided topic.
+        - Identify the specific technical subtopic or skill being tested.
 
+        Examples of subtopics for Machine Learning:
+        - Regularization
+        - Classification Metrics
+        - Bias-Variance Tradeoff
+        - Overfitting and Underfitting
+        - Decision Trees
+        - Ensemble Learning
+        - Feature Engineering
+        - Model Evaluation
+        - Clustering
+        - Dimensionality Reduction
+        """
     interaction = client.interactions.create(
         model="gemini-3.1-flash-lite",
         input=prompt,

@@ -14,6 +14,7 @@ def generate_final_report(
             "average_clarity": 0,
             "average_completeness": 0,
             "topic_performance": {},
+            "subtopic_performance": {},
             "strengths": [],
             "weaknesses": []
         }
@@ -30,6 +31,7 @@ def generate_final_report(
     weaknesses = []
 
     topic_scores = {}
+    subtopic_scores = {}
 
     for record in history:
         evaluation = record["evaluation"]
@@ -41,6 +43,22 @@ def generate_final_report(
         total_clarity += evaluation["clarity"]
         total_completeness += evaluation["completeness"]
 
+        subtopic = record.get(
+            "subtopic",
+            record.get("topic", "General")
+        )
+
+        if subtopic not in subtopic_scores:
+            subtopic_scores[subtopic] = {
+                "total_score": 0,
+                "questions": 0
+            }
+
+        subtopic_scores[subtopic]["total_score"] += (
+            evaluation["overall_score"]
+        )
+
+        subtopic_scores[subtopic]["questions"] += 1
         strengths.extend(evaluation["strengths"])
         weaknesses.extend(evaluation["weaknesses"])
 
@@ -57,6 +75,14 @@ def generate_final_report(
 
     for topic, data in topic_scores.items():
         topic_performance[topic] = round(
+            data["total_score"] / data["questions"],
+            2
+        )
+
+    subtopic_performance = {}
+
+    for subtopic, data in subtopic_scores.items():
+        subtopic_performance[subtopic] = round(
             data["total_score"] / data["questions"],
             2
         )
@@ -84,6 +110,7 @@ def generate_final_report(
             2
         ),
         "topic_performance": topic_performance,
+        "subtopic_performance": subtopic_performance,
         "strengths": strengths,
         "weaknesses": weaknesses
     }

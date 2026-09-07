@@ -1,14 +1,14 @@
-from ai_ml.interview_intelligence.tests.test_interview_flow import evaluation
 from typing import List, Dict, Any
-
-from ai_ml.interview_intelligence.evaluator import evaluate_answer
 from ai_ml.interview_intelligence.adaptive_engine import get_next_difficulty
-from ai_ml.interview_intelligence.question_generator import generate_question
 from ai_ml.interview_intelligence.report_generator import (
     generate_final_report
 )
 from ai_ml.interview_intelligence.performance_summary import (
     generate_performance_summary
+)
+
+from ai_ml.interview_intelligence.orchestrator import (
+    InterviewOrchestrator
 )
 
 class InterviewSession:
@@ -24,6 +24,7 @@ class InterviewSession:
         self.question_number = 0
         self.history: List[Dict[str, Any]] = []
         self.current_question = None
+        self.orchestrator = InterviewOrchestrator()
     
     def generate_next_question(self):
         if self.is_complete():
@@ -34,7 +35,7 @@ class InterviewSession:
             for item in self.history
         ]
 
-        generated = generate_question(
+        generated = self.orchestrator.interviewer.generate_question(
             topic=self.topic,
             difficulty=self.current_difficulty,
             previous_questions=previous_questions
@@ -60,7 +61,7 @@ class InterviewSession:
 
         concepts_text = ", ".join(expected_concepts)
 
-        evaluation = evaluate_answer(
+        evaluation = self.orchestrator.evaluator.evaluate(
             question=question,
             candidate_answer=candidate_answer,
             expected_concepts=concepts_text,
@@ -76,8 +77,12 @@ class InterviewSession:
             "question_number": self.question_number,
             "question": question,
             "candidate_answer": candidate_answer,
-            "difficulty": self.current_difficulty,
+
+            
             "topic": self.current_question.topic,
+            "subtopic": self.current_question.subtopic,
+
+            "difficulty": self.current_difficulty,
             "expected_concepts": expected_concepts,
             "evaluation": evaluation.model_dump(),
             "next_difficulty": next_difficulty
@@ -103,3 +108,10 @@ class InterviewSession:
 
     def is_complete(self) -> bool:
         return self.question_number >= self.total_questions
+
+    def get_learning_plan(self):
+        report = self.get_final_report()
+
+        return self.orchestrator.generate_learning_plan(
+            report["subtopic_performance"]
+        )
