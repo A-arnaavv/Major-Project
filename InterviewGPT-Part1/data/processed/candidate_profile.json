@@ -1,0 +1,90 @@
+{
+    "name": "TANISHKA",
+    "summary": "B.Tech Computer Science student specializing in Machine Learning and Natural Language Processing with hands-on experience in building end-to-end text classification systems. Proficient in Python, TensorFlow, and Scikit-learn with experience in deep learning models (LSTM, CNN-LSTM) and feature engineering techniques (TF-IDF, Word2Vec, FastText). Experienced in building and deploying ML models for real-world applications.",
+    "education": [
+        {
+            "degree": "B.Tech \u2013 Computer Science & Engineering",
+            "institution": "Amity University Punjab",
+            "duration": "Aug 2023 \u2013 Present",
+            "cgpa": "7.86 / 10"
+        },
+        {
+            "degree": "Senior Secondary (Non-Medical)",
+            "institution": "GMSSS 23A Chandigarh",
+            "duration": "2021 \u2013 2023"
+        }
+    ],
+    "technical_skills": [
+        "Machine Learning",
+        "Deep Learning",
+        "NLP",
+        "Data Structures & Algorithms",
+        "Operating Systems",
+        "DBMS",
+        "Computer Networks"
+    ],
+    "programming_languages": [
+        "Python",
+        "Java",
+        "C",
+        "C++",
+        "R"
+    ],
+    "libraries_tools": [
+        "TensorFlow",
+        "Scikit-learn",
+        "Pandas",
+        "NumPy",
+        "NLTK",
+        "Matplotlib",
+        "Seaborn",
+        "Jupyter Notebook"
+    ],
+    "databases": [
+        "MySQL",
+        "MongoDB"
+    ],
+    "projects": [
+        {
+            "title": "Cyberbullying Detection Model",
+            "description": "Designed a multi-class text classification system for detecting harmful social media content. Implemented ML and DL models for benchmarking performance. Generated embeddings using Word2Vec, FastText, and GloVe with PCA. Performed sentiment analysis and feature engineering on large-scale Twitter datasets. Compared multiple models to identify the best-performing architecture."
+        },
+        {
+            "title": "Speech Emotion Recognition System (ML & DL)",
+            "description": "Developed an end-to-end SER system using the RAVDESS dataset for multi-class emotion classification. Extracted audio features (MFCC, Chroma, Mel Spectrogram) using Librosa. Built and compared ML (SVM, Random Forest, LightGBM) and DL models (CNN, LSTM, CNN-BiLSTM). Achieved 90% accuracy using CNN-BiLSTM, capturing spatial and temporal patterns. Developed a web interface (HTML, CSS) with backend integration using Flask (app.py)."
+        },
+        {
+            "title": "Fake News Detection System",
+            "description": "Developed NLP pipeline using NLTK (tokenization, stemming, stopword removal). Applied feature extraction (TF-IDF, PCA, Truncated SVD). Built models: Logistic Regression, SVM, LSTM, CNN-LSTM, CNN-BiLSTM. Improved performance using hyperparameter tuning and class balancing. Evaluated using accuracy, precision, recall, F1-score."
+        }
+    ],
+    "experience": [
+        {
+            "role": "AI Intern",
+            "company": "Amity School of Engineering & Technology",
+            "duration": "June 2025 \u2013 July 2025",
+            "responsibilities": [
+                "Built an end-to-end machine learning pipeline for automated text classification",
+                "Performed data preprocessing including tokenization, stemming, stopword removal, and text normalization",
+                "Applied feature engineering techniques such as TF-IDF and feature selection methods",
+                "Implemented deep learning models including LSTM and improved performance using hyperparameter tuning and regularization",
+                "Achieved 97% model accuracy using LSTM architecture",
+                "Evaluated models using accuracy, precision, recall, F1-score, and confusion matrix"
+            ]
+        }
+    ],
+    "certifications": [
+        "Complete Data Science, Machine Learning, DL ,NLP Bootcamp By Krish Naik"
+    ],
+    "strengths": [
+        "Strong focus and specialized project portfolio in NLP and audio processing",
+        "Solid practical understanding of complete ML/DL workflows from preprocessing to model deployment",
+        "Good foundation in core computer science subjects alongside programming skills",
+        "Demonstrated soft skills including communication, problem solving, and project management"
+    ],
+    "improvement_areas": [
+        "Limited commercial or enterprise-level industry experience beyond academic internships",
+        "Absence of cloud technologies (AWS, GCP, Azure) and containerization tools (Docker, Kubernetes) for MLOps",
+        "Could include metrics demonstrating the real-world performance impact or deployment metrics of projects"
+    ]
+}
