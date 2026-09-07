@@ -25,7 +25,11 @@ class GeneratedQuestion(BaseModel):
 def generate_question(
     topic: str,
     difficulty: str,
-    previous_questions: List[str] | None = None
+    previous_questions: List[str] | None = None,
+    resume_context: str | None = None,
+    job_role: str | None = None,
+    company_context: str | None = None,
+    retrieved_context: str | None = None,
 ) -> GeneratedQuestion:
 
     previous_questions = previous_questions or []
@@ -252,6 +256,20 @@ Examples of subtopics for Machine Learning:
 - Model Evaluation
 - Clustering
 - Dimensionality Reduction
+
+Additional Candidate / Job Context:
+
+Resume Context:
+{resume_context or "Not provided"}
+
+Target Job Role:
+{job_role or "Not provided"}
+
+Company Context:
+{company_context or "Not provided"}
+
+Retrieved RAG Context:
+{retrieved_context or "Not provided"}
 """
 
     interaction = call_gemini_with_retry(

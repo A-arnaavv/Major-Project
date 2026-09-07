@@ -16,29 +16,44 @@ class InterviewSession:
         self,
         topic: str,
         difficulty: str = "medium",
-        total_questions: int = 5
+        total_questions: int = 5,
+        resume_context: str | None = None,
+        job_role: str | None = None,
+        company_context: str | None = None,
+        retrieved_context: str | None = None,
     ):
         self.topic = topic
         self.current_difficulty = difficulty
         self.total_questions = total_questions
         self.question_number = 0
-        self.history: List[Dict[str, Any]] = []
+        self.history = []
         self.current_question = None
+
+        self.resume_context = resume_context
+        self.job_role = job_role
+        self.company_context = company_context
+        self.retrieved_context = retrieved_context
+
         self.orchestrator = InterviewOrchestrator()
     
     def generate_next_question(self):
+
         if self.is_complete():
             raise ValueError("Interview is already complete.")
 
         previous_questions = [
-            item["question"]
-            for item in self.history
+            record["question"]
+            for record in self.history
         ]
 
         generated = self.orchestrator.interviewer.generate_question(
             topic=self.topic,
             difficulty=self.current_difficulty,
-            previous_questions=previous_questions
+            previous_questions=previous_questions,
+            resume_context=self.resume_context,
+            job_role=self.job_role,
+            company_context=self.company_context,
+            retrieved_context=self.retrieved_context,
         )
 
         self.current_question = generated

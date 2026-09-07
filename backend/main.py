@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -20,9 +20,16 @@ class StartInterviewRequest(BaseModel):
     difficulty: str = "medium"
     total_questions: int = 5
 
+    resume_context: str | None = None
+    job_role: str | None = None
+    company_context: str | None = None
+    retrieved_context: str | None = None
+
+
 class SubmitAnswerRequest(BaseModel):
     session_id: str
     candidate_answer: str
+
 
 @app.get("/")
 def root():
@@ -44,17 +51,33 @@ def start_interview(data: StartInterviewRequest):
     session = InterviewSession(
         topic=data.topic,
         difficulty=data.difficulty,
-        total_questions=data.total_questions
+        total_questions=data.total_questions,
+        resume_context=data.resume_context,
+        job_role=data.job_role,
+        company_context=data.company_context,
+        retrieved_context=data.retrieved_context,
     )
 
     sessions[data.session_id] = session
 
-    question = session.generate_next_question()
+    try:
+        question = session.generate_next_question()
+
+    except (ValueError, RuntimeError) as exc:
+        sessions.pop(data.session_id, None)
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc)
+        )
 
     return {
         "session_id": data.session_id,
+        "status": "started",
         "question": question.question,
         "difficulty": question.difficulty,
+        "topic": question.topic,
+        "subtopic": question.subtopic,
     }
 
 
@@ -73,36 +96,63 @@ def submit_answer(data: SubmitAnswerRequest):
         result = session.submit_answer(
             candidate_answer=data.candidate_answer
         )
+
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc)
         )
 
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc)
+        )
+
     if session.is_complete():
 
-        numerical_report = session.get_final_report()
-        ai_summary = session.get_ai_performance_summary()
+        try:
+            numerical_report = session.get_final_report()
+            ai_summary = session.get_ai_performance_summary()
+            learning_plan = session.get_learning_plan()
+
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc)
+            )
 
         return {
+            "session_id": data.session_id,
             "status": "completed",
             "evaluation": result["evaluation"],
             "next_difficulty": result["next_difficulty"],
             "final_report": {
                 "numerical_report": numerical_report,
-                "ai_summary": ai_summary.model_dump()
+                "ai_summary": ai_summary.model_dump(),
+                "learning_plan": learning_plan,
             }
         }
 
-    next_question = session.generate_next_question()
+    try:
+        next_question = session.generate_next_question()
+
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc)
+        )
 
     return {
+        "session_id": data.session_id,
         "status": "in_progress",
         "evaluation": result["evaluation"],
         "next_difficulty": result["next_difficulty"],
         "next_question": {
             "question": next_question.question,
-            "difficulty": next_question.difficulty
+            "difficulty": next_question.difficulty,
+            "topic": next_question.topic,
+            "subtopic": next_question.subtopic,
         }
     }
 
@@ -118,11 +168,33 @@ def next_question(session_id: str):
             detail="Session not found"
         )
 
-    question = session.generate_next_question()
+    if session.is_complete():
+        raise HTTPException(
+            status_code=400,
+            detail="Interview is already complete"
+        )
+
+    try:
+        question = session.generate_next_question()
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc)
+        )
+
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc)
+        )
 
     return {
+        "session_id": session_id,
         "question": question.question,
-        "difficulty": question.difficulty
+        "difficulty": question.difficulty,
+        "topic": question.topic,
+        "subtopic": question.subtopic,
     }
 
 
@@ -137,10 +209,20 @@ def get_report(session_id: str):
             detail="Session not found"
         )
 
-    numerical_report = session.get_final_report()
-    ai_summary = session.get_ai_performance_summary()
+    try:
+        numerical_report = session.get_final_report()
+        ai_summary = session.get_ai_performance_summary()
+        learning_plan = session.get_learning_plan()
+
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc)
+        )
 
     return {
+        "session_id": session_id,
         "numerical_report": numerical_report,
-        "ai_summary": ai_summary.model_dump()
+        "ai_summary": ai_summary.model_dump(),
+        "learning_plan": learning_plan,
     }

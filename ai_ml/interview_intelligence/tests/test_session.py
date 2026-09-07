@@ -103,3 +103,22 @@ def test_session_learning_plan():
 
     assert len(plan) >= 1
     assert plan[0]["performance_level"] == "Critical"
+
+def test_session_accepts_part1_context():
+    session = InterviewSession(
+        topic="Machine Learning",
+        difficulty="medium",
+        total_questions=1,
+        resume_context="Python and NLP experience",
+        job_role="ML Engineer",
+        company_context="Recommendation systems",
+        retrieved_context="Embeddings and ranking models",
+    )
+
+    question = session.generate_next_question()
+
+    assert question.question
+    assert session.resume_context == "Python and NLP experience"
+    assert session.job_role == "ML Engineer"
+    assert session.company_context == "Recommendation systems"
+    assert session.retrieved_context == "Embeddings and ranking models"
