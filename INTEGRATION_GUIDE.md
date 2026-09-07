@@ -21,12 +21,54 @@ This module owns:
 * performance summaries
 * personalized learning recommendations
 * analytics-ready export records
+* multi-agent interview orchestration
+* Gemini reliability handling
 
 The module is designed to consume outputs from AI/ML Part 1 and expose structured outputs to backend, analytics, and dashboard components.
 
 ---
 
-# 1. AI/ML Part 1 → Interview Intelligence
+# 1. System Architecture
+
+The current integration architecture is:
+
+```text
+AI/ML Part 1
+Resume Analysis + RAG
+        ↓
+InterviewContext
+        ↓
+FastAPI Backend
+        ↓
+SessionStore
+        ↓
+InterviewSession
+        ↓
+InterviewOrchestrator
+   ├── InterviewerAgent
+   ├── EvaluatorAgent
+   └── RecommendationAgent
+        ↓
+Performance + Learning Plan
+        ↓
+Analytics Exporter
+        ↓
+Analytics / BI / Database
+```
+
+The main principle is separation of responsibilities.
+
+AI/ML Part 1 supplies candidate-, role-, company-, and retrieval-specific context.
+
+AI/ML Part 2 owns the interview intelligence workflow.
+
+The backend exposes Part 2 through HTTP endpoints.
+
+The analytics exporter converts interview results into stable structured records for downstream analytics.
+
+---
+
+# 2. AI/ML Part 1 → Interview Intelligence
 
 The first AI/ML module may provide candidate- and company-specific context.
 
@@ -67,11 +109,13 @@ The additional context fields are optional.
 
 If they are not provided, the interview system still works using the topic and difficulty.
 
-The Interview Intelligence module should not perform resume parsing, RAG retrieval, embedding generation, vector search, or company research itself. Those responsibilities belong to AI/ML Part 1.
+The Interview Intelligence module should not perform resume parsing, RAG retrieval, embedding generation, vector search, or company research itself.
+
+Those responsibilities belong to AI/ML Part 1.
 
 ---
 
-# 2. Starting an Interview Through the API
+# 3. Running the API
 
 The FastAPI backend is implemented in:
 
@@ -91,7 +135,52 @@ Swagger documentation is available at:
 http://127.0.0.1:8000/docs
 ```
 
-Start an interview with:
+The current API surface is:
+
+```text
+GET  /
+GET  /health
+
+POST /interview/start
+POST /interview/answer
+
+GET  /interview/{session_id}/next
+GET  /interview/{session_id}/report
+GET  /interview/{session_id}/analytics
+```
+
+---
+
+# 4. Service Health
+
+Use:
+
+```text
+GET /health
+```
+
+The health endpoint provides a lightweight service check without making a Gemini API request.
+
+Example response:
+
+```json
+{
+  "status": "healthy",
+  "service": "Interview Intelligence API",
+  "version": "0.1.0",
+  "llm_mode": "mock"
+}
+```
+
+The `llm_mode` field indicates whether the application is currently configured for mock or real Gemini execution.
+
+The endpoint intentionally does not call Gemini so health monitoring does not consume API quota or become dependent on temporary external LLM availability.
+
+---
+
+# 5. Starting an Interview
+
+Use:
 
 ```text
 POST /interview/start
@@ -125,9 +214,26 @@ Example response:
 }
 ```
 
+## Request Validation
+
+The API validates interview-start requests before creating a session.
+
+Current rules include:
+
+```text
+session_id       required, minimum length 1
+topic            required, minimum length 1
+difficulty       easy | medium | hard
+total_questions  minimum 1, maximum 20
+```
+
+Invalid request structures are rejected by FastAPI/Pydantic with HTTP `422`.
+
+Duplicate session IDs are rejected with HTTP `400`.
+
 ---
 
-# 3. Submitting Candidate Answers
+# 6. Submitting Candidate Answers
 
 Use:
 
@@ -144,7 +250,11 @@ Example request:
 }
 ```
 
-The response contains structured evaluation fields such as:
+The candidate does not submit the original question or expected concepts.
+
+Those are maintained server-side by the interview session. This prevents the client from modifying evaluation context.
+
+The evaluation contains:
 
 ```json
 {
@@ -161,19 +271,23 @@ The response contains structured evaluation fields such as:
   ],
   "feedback": "Expand the explanation with implementation details.",
   "improved_answer": "A stronger answer would explain...",
-  "next_difficulty": "medium"
+  "next_difficulty": "same"
 }
 ```
 
-The interview automatically adapts the next question difficulty based on the evaluation score.
+The Gemini-produced `next_difficulty` field is advisory.
 
-The deterministic adaptive engine is the source of truth for difficulty progression.
+The deterministic adaptive engine is the actual source of truth for the next interview difficulty.
+
+When more questions remain, the API returns the next question automatically.
+
+When the configured question count is reached, it returns the final report.
 
 ---
 
-# 4. Adaptive Difficulty Logic
+# 7. Adaptive Difficulty Logic
 
-Difficulty levels:
+Difficulty levels are:
 
 ```text
 easy
@@ -191,11 +305,52 @@ otherwise          → keep same difficulty
 
 Difficulty is bounded between `easy` and `hard`.
 
+Examples:
+
+```text
+medium + score 8.0 → hard
+medium + score 6.0 → medium
+medium + score 3.0 → easy
+
+hard + score 9.0   → hard
+easy + score 2.0   → easy
+```
+
+This deterministic rule prevents LLM variability from directly controlling interview progression.
+
 ---
 
-# 5. Final Performance Report
+# 8. Retrieving the Next Question
 
-After the configured number of questions is completed, the API returns a final report containing:
+Use:
+
+```text
+GET /interview/{session_id}/next
+```
+
+Example:
+
+```text
+GET /interview/candidate_001/next
+```
+
+This endpoint returns the current/next interview question for an active session.
+
+Missing sessions return HTTP `404`.
+
+Requests for another question after the interview has completed return HTTP `400`.
+
+---
+
+# 9. Final Performance Report
+
+Use:
+
+```text
+GET /interview/{session_id}/report
+```
+
+The final report contains:
 
 ```text
 numerical_report
@@ -221,11 +376,50 @@ The AI summary contains:
 * recommended topics
 * final feedback
 
-The learning plan prioritizes weaker subtopics and gives recommended next actions.
+The learning plan prioritizes weaker subtopics and provides recommended next actions.
+
+A final report is also returned automatically when the final interview answer is submitted.
 
 ---
 
-# 6. Analytics Integration
+# 10. Personalized Learning Recommendations
+
+Learning recommendations are generated from subtopic-level performance.
+
+Lower-performing subtopics receive higher priority.
+
+The current performance categories are:
+
+```text
+Score >= 8  → Strong
+Score >= 6  → Moderate
+Score >= 4  → Weak
+Score < 4   → Critical
+```
+
+Recommendations become progressively more fundamental as the score decreases.
+
+Examples include:
+
+```text
+Strong
+→ Maintain and practice advanced questions.
+
+Moderate
+→ Review key concepts and practice medium-level questions.
+
+Weak
+→ Revisit fundamentals and solve guided practice questions.
+
+Critical
+→ Study the fundamentals before attempting advanced questions.
+```
+
+This output can be consumed directly by frontend learning-plan views or analytics dashboards.
+
+---
+
+# 11. Analytics Integration
 
 Analytics-ready outputs can be obtained through:
 
@@ -249,7 +443,21 @@ The response contains:
 }
 ```
 
-## Question-Level Analytics Record
+The exporter implementation is located in:
+
+```text
+ai_ml/interview_intelligence/analytics_exporter.py
+```
+
+The schemas are defined in:
+
+```text
+ai_ml/interview_intelligence/integration_schemas.py
+```
+
+---
+
+# 12. Question-Level Analytics Record
 
 Each interview question is exported using the `QuestionAnalyticsRecord` schema.
 
@@ -305,7 +513,7 @@ Example:
 
 ---
 
-# 7. Session-Level Analytics Summary
+# 13. Session-Level Analytics Summary
 
 The analytics summary contains:
 
@@ -335,7 +543,7 @@ This object is intended for:
 
 ---
 
-# 8. Analytics Team Recommendation
+# 14. Analytics Team Recommendation
 
 For storage, the analytics team can conceptually maintain two datasets.
 
@@ -359,7 +567,7 @@ overall_score
 next_difficulty
 ```
 
-Additional text fields such as feedback, strengths, weaknesses, and improved answers may also be stored if needed.
+Additional text fields such as feedback, strengths, weaknesses, and improved answers may also be stored if required.
 
 ## Session-Level Dataset
 
@@ -382,29 +590,62 @@ overall_performance
 
 ---
 
-# 9. Current Storage Behavior
+# 15. Session Storage Architecture
 
-Interview sessions are currently stored in memory inside the FastAPI application.
+Session storage is accessed through:
 
-This means:
+```text
+backend/session_store.py
+```
 
-* restarting the server clears sessions
-* sessions are not yet persisted to a database
-* the existing structure is suitable for development and integration testing
+The FastAPI routes no longer manipulate a raw session dictionary directly.
 
-Persistent storage should be handled during team integration.
+Instead:
 
-Possible future targets include:
+```text
+FastAPI
+   ↓
+SessionStore
+   ↓
+InterviewSession
+```
+
+The current `SessionStore` supports:
+
+```text
+create
+get
+exists
+delete
+clear
+```
+
+This separates HTTP/API logic from session-storage logic and creates a clean replacement point for future persistent storage.
+
+## Current Limitation
+
+The current implementation is still in-memory.
+
+Therefore:
+
+* restarting the server clears active sessions
+* sessions are not persisted across application restarts
+* multiple independent server processes do not automatically share session state
+* the implementation is suitable for development, testing, demos, and initial team integration
+
+A future database-backed store could replace the current implementation without requiring the core interview intelligence logic to be rewritten.
+
+Possible persistence targets include:
 
 * PostgreSQL
 * MongoDB
-* another project-selected database
+* another database selected by the project team
 
-The Interview Intelligence module itself should remain separated from database-specific logic where possible.
+Database-specific logic should remain outside the Interview Intelligence core where possible.
 
 ---
 
-# 10. LLM Modes
+# 16. LLM Modes
 
 The project supports two execution modes.
 
@@ -426,6 +667,8 @@ LLM_MODE=mock
 
 Mock mode avoids Gemini API calls and produces deterministic outputs.
 
+It also allows other team members to develop against Part 2 without requiring Gemini credentials.
+
 ## Real Gemini Mode
 
 Used for real AI-generated interview behavior.
@@ -440,13 +683,15 @@ GEMINI_MODEL=YOUR_MODEL
 
 Never commit `.env` or API credentials to Git.
 
+Mock mode should not require a Gemini API key or instantiate a Gemini client before entering the mock execution path.
+
 ---
 
-# 11. Gemini Reliability
+# 17. Gemini Reliability
 
-Gemini calls use a retry helper for transient failures.
+Gemini calls use a shared retry helper for transient failures.
 
-Handled transient conditions include:
+Handled transient status codes include:
 
 ```text
 408
@@ -455,17 +700,21 @@ Handled transient conditions include:
 502
 503
 504
-connection failures
-timeouts
 ```
 
-The current application performs limited retry attempts with exponential backoff.
+Connection failures and timeouts are also retried.
 
-Invalid structured Gemini responses are converted into controlled runtime errors.
+The current implementation uses limited retry attempts with exponential backoff and jitter.
+
+Non-transient Gemini API errors are converted into controlled runtime errors.
+
+Invalid structured Gemini responses are also converted into controlled runtime errors.
+
+At the FastAPI boundary, relevant runtime failures are returned as HTTP `503` responses instead of allowing uncontrolled application crashes.
 
 ---
 
-# 12. Multi-Agent Architecture
+# 18. Multi-Agent Architecture
 
 The Interview Intelligence module uses:
 
@@ -474,14 +723,14 @@ InterviewSession
       ↓
 InterviewOrchestrator
       ↓
-InterviewerAgent
-EvaluatorAgent
-RecommendationAgent
+ ┌──────────────────────┐
+ │ InterviewerAgent     │
+ │ EvaluatorAgent       │
+ │ RecommendationAgent  │
+ └──────────────────────┘
 ```
 
-Responsibilities:
-
-### InterviewerAgent
+## InterviewerAgent
 
 Generates interview questions using:
 
@@ -493,21 +742,35 @@ Generates interview questions using:
 * company context
 * retrieved RAG context
 
-### EvaluatorAgent
+The question generator avoids repeating previous questions where possible.
 
-Evaluates candidate answers and produces structured scoring and feedback.
+## EvaluatorAgent
 
-### RecommendationAgent
+Evaluates candidate answers and produces:
 
-Produces personalized learning recommendations from subtopic performance.
+* technical accuracy
+* relevance
+* clarity
+* completeness
+* overall score
+* strengths
+* weaknesses
+* constructive feedback
+* improved answer
+
+## RecommendationAgent
+
+Produces personalized learning recommendations from subtopic-level performance.
+
+The agents are coordinated through `InterviewOrchestrator` rather than being called independently by the API.
 
 ---
 
-# 13. Important Ownership Boundary
+# 19. Important Ownership Boundary
 
-AI/ML Part 2 should consume Part 1 outputs but should not duplicate Part 1 responsibilities.
+AI/ML Part 2 consumes Part 1 outputs but should not duplicate Part 1 responsibilities.
 
-## Part 1 owns
+## Part 1 Owns
 
 ```text
 resume parsing
@@ -519,63 +782,126 @@ company-specific information retrieval
 candidate profile extraction
 ```
 
-## Part 2 owns
+## Part 2 Owns
 
 ```text
 interview orchestration
 question delivery
 answer evaluation
 adaptive difficulty
-scoring
+structured scoring
 feedback
 improved answers
 session history
 performance summaries
 learning recommendations
 analytics export
+Gemini reliability for Part 2 calls
 ```
+
+This boundary should be maintained during integration to prevent duplicated pipelines.
 
 ---
 
-# 14. Automated Testing
+# 20. API Error Behavior
+
+Important API behavior currently includes:
+
+```text
+Invalid request schema          → 422
+Invalid difficulty              → 422
+Invalid total_questions         → 422
+Empty session_id/topic          → 422
+Duplicate session               → 400
+Missing interview session       → 404
+Question after completion       → 400
+Part 2 runtime/LLM failure      → 503
+```
+
+These responses give frontend and integration code predictable failure behavior.
+
+---
+
+# 21. Automated Testing
 
 Current test coverage includes:
 
 * Gemini retry behavior
 * mock question generation
 * duplicate-question prevention
-* answer evaluation
+* empty/no-answer evaluation
+* valid mock-answer evaluation
 * adaptive difficulty
 * learning recommendations
 * interview session behavior
+* session completion
+* session history
+* final reports
 * Part 1 context acceptance
 * integration schemas
 * analytics exporter
 * FastAPI endpoints
 * analytics endpoint behavior
 * missing-session handling
+* API request validation
+* invalid difficulty handling
+* invalid interview length handling
+* completed-interview edge cases
+* health endpoint behavior
+* SessionStore create/get behavior
+* SessionStore duplicate protection
+* SessionStore deletion
+* SessionStore cleanup
 
 Current verified result:
 
 ```text
-30 passed
+46 passed
 ```
 
 Run all relevant tests with:
 
 ```bash
-python3 -m pytest ai_ml/interview_intelligence/tests backend/test_main.py -v
+python3 -m pytest ai_ml/interview_intelligence/tests backend/test_main.py backend/test_session_store.py -v
 ```
 
-For normal testing, use:
+For normal automated testing, use:
 
 ```env
 LLM_MODE=mock
 ```
 
+The current environment may display dependency deprecation warnings related to FastAPI/Starlette test dependencies. These warnings do not represent failing project tests.
+
 ---
 
-# 15. Recommended Team Integration Flow
+# 22. Real Gemini Smoke Testing
+
+The Interview Intelligence pipeline has also been tested in real Gemini mode through an end-to-end smoke test.
+
+The smoke test validated the flow:
+
+```text
+Part 1-style context
+        ↓
+Real Gemini question generation
+        ↓
+Candidate answer
+        ↓
+Real Gemini structured evaluation
+        ↓
+Deterministic difficulty adaptation
+        ↓
+Final performance summary
+```
+
+This confirms that mock-mode automated tests and real Gemini execution both exercise the intended architecture.
+
+For normal development and CI-style testing, continue using mock mode to avoid unnecessary API usage and non-deterministic test behavior.
+
+---
+
+# 23. Recommended Team Integration Flow
 
 The intended full-system flow is:
 
@@ -583,9 +909,14 @@ The intended full-system flow is:
 Resume / Candidate Data
           ↓
 AI/ML Part 1
+          ↓
 Resume Analysis + RAG
           ↓
 InterviewContext
+          ↓
+FastAPI
+          ↓
+SessionStore
           ↓
 AI/ML Part 2
 Interview Intelligence
@@ -598,7 +929,7 @@ Final Performance Report
           ↓
 Analytics Exporter
           ↓
-Backend / Database
+Backend / Persistent Storage
           ↓
 Analytics + BI Dashboard
 ```
@@ -610,3 +941,24 @@ ai_ml/interview_intelligence/integration_schemas.py
 ```
 
 These schemas should be treated as the contract between team components.
+
+---
+
+# 24. Integration Checklist
+
+Before full team integration, verify:
+
+* AI/ML Part 1 can populate the optional context fields.
+* Backend/frontend uses a unique `session_id`.
+* Frontend sends only the candidate answer for answer submission.
+* Difficulty values are `easy`, `medium`, or `hard`.
+* Interview length is between 1 and 20 questions.
+* Development and integration environments use `LLM_MODE=mock` when real Gemini behavior is unnecessary.
+* Real deployments provide Gemini configuration securely.
+* Analytics consumes the exported question-level and session-level schemas.
+* Database persistence is implemented outside the core Interview Intelligence logic.
+* `.env` and credentials remain excluded from Git.
+* `/health` can be used for lightweight service checks.
+* The full automated test suite remains green before merging.
+
+At the current checkpoint, the Interview Intelligence module is integration-ready with a verified **46-test passing baseline**.
