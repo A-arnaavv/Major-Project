@@ -1,5 +1,7 @@
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ai_ml.interview_intelligence.session import InterviewSession
 from ai_ml.interview_intelligence.analytics_exporter import (
@@ -16,10 +18,16 @@ app = FastAPI(
 
 
 class StartInterviewRequest(BaseModel):
-    session_id: str
-    topic: str
-    difficulty: str = "medium"
-    total_questions: int = 5
+    session_id: str = Field(min_length=1)
+    topic: str = Field(min_length=1)
+
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+
+    total_questions: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+    )
 
     resume_context: str | None = None
     job_role: str | None = None
@@ -28,7 +36,7 @@ class StartInterviewRequest(BaseModel):
 
 
 class SubmitAnswerRequest(BaseModel):
-    session_id: str
+    session_id: str = Field(min_length=1)
     candidate_answer: str
 
 

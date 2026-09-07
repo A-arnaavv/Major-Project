@@ -251,3 +251,129 @@ def test_missing_analytics_session():
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Session not found"
+
+
+def test_invalid_difficulty_rejected():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "invalid_difficulty",
+            "topic": "Machine Learning",
+            "difficulty": "expert",
+            "total_questions": 1,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_zero_questions_rejected():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "zero_questions",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": 0,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_too_many_questions_rejected():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "too_many_questions",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": 21,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_empty_topic_rejected():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "empty_topic",
+            "topic": "",
+            "difficulty": "medium",
+            "total_questions": 1,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_empty_session_id_rejected():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": 1,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_next_question_missing_session():
+    response = client.get(
+        "/interview/missing_session/next"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Session not found"
+
+
+def test_next_question_after_completion():
+    client.post(
+        "/interview/start",
+        json={
+            "session_id": "completed_next_test",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": 1,
+        },
+    )
+
+    client.post(
+        "/interview/answer",
+        json={
+            "session_id": "completed_next_test",
+            "candidate_answer": "na",
+        },
+    )
+
+    response = client.get(
+        "/interview/completed_next_test/next"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Interview is already complete"
+
+
+def test_report_missing_session():
+    response = client.get(
+        "/interview/missing_report/report"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Session not found"
+
+
+def test_answer_missing_candidate_answer():
+    response = client.post(
+        "/interview/answer",
+        json={
+            "session_id": "some_session",
+        },
+    )
+
+    assert response.status_code == 422
