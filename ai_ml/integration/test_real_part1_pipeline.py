@@ -1,65 +1,66 @@
 import json
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from ai_ml.integration.part1_to_part2 import build_interview_context
+from ai_ml.part1.paths import CANDIDATE_PROFILE_PATH
+from ai_ml.part1.rag.retriever import hybrid_retrieve
 from backend.main import app
 from backend.session_store import session_store
 
-client = TestClient(app)
 
-PROFILE_PATH = (
-    Path(__file__).parent
-    / "sample_part1_output"
-    / "candidate_profile.json"
-)
+client = TestClient(app)
 
 
 def load_candidate_profile():
-    assert PROFILE_PATH.exists(), (
-        f"Missing Part 1 output: {PROFILE_PATH}"
+    assert CANDIDATE_PROFILE_PATH.exists(), (
+        f"Missing Part 1 output: {CANDIDATE_PROFILE_PATH}"
     )
 
-    with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+    with open(CANDIDATE_PROFILE_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def sample_retrieval_results():
+def get_real_part1_retrieval_results():
     """
-    Temporary replacement until we directly call Part 1 Hybrid-RAG.
-    Uses realistic retrieved resume snippets.
+    Run the actual Part 1 Hybrid-RAG pipeline.
+
+    This performs:
+    query embedding
+    -> dense Milvus retrieval
+    -> sparse Milvus retrieval
+    -> reciprocal rank fusion
     """
 
-    return [
-        {
-            "id": 1,
-            "score": 0.94,
-            "text": "Candidate built an NLP fake-news classification system using BERT.",
-        },
-        {
-            "id": 2,
-            "score": 0.91,
-            "text": "Candidate has Python, TensorFlow, PyTorch and scikit-learn experience.",
-        },
-        {
-            "id": 3,
-            "score": 0.87,
-            "text": "Projects include recommendation systems and speech emotion recognition.",
-        },
-    ]
+    results = hybrid_retrieve(
+        "What machine learning projects and technical skills "
+        "does the candidate have?",
+        top_k=5,
+    )
+
+    assert results
+    assert len(results) <= 5
+
+    for result in results:
+        assert "id" in result
+        assert "score" in result
+        assert "text" in result
+        assert result["text"]
+
+    return results
 
 
 def setup_function():
     session_store.clear()
 
 
-def test_real_part1_candidate_profile_to_part2():
+def test_real_part1_rag_to_part2_context():
     candidate_profile = load_candidate_profile()
+    retrieval_results = get_real_part1_retrieval_results()
 
     context = build_interview_context(
         candidate_profile=candidate_profile,
-        retrieval_results=sample_retrieval_results(),
+        retrieval_results=retrieval_results,
         topic="Machine Learning",
         difficulty="medium",
         total_questions=2,
@@ -70,10 +71,34 @@ def test_real_part1_candidate_profile_to_part2():
     assert context.resume_context is not None
     assert len(context.resume_context) > 100
 
+    assert context.retrieved_context is not None
+    assert len(context.retrieved_context) > 100
+
+    # Make sure actual Part 1 retrieval text reached Part 2.
+    assert any(
+        result["text"] in context.retrieved_context
+        for result in retrieval_results
+    )
+
+
+def test_real_part1_rag_starts_part2_interview():
+    candidate_profile = load_candidate_profile()
+    retrieval_results = get_real_part1_retrieval_results()
+
+    context = build_interview_context(
+        candidate_profile=candidate_profile,
+        retrieval_results=retrieval_results,
+        topic="Machine Learning",
+        difficulty="medium",
+        total_questions=2,
+        job_role="Machine Learning Engineer",
+        company_context="Recommendation Systems Company",
+    )
+
     response = client.post(
         "/interview/start",
         json={
-            "session_id": "real_part1_profile_test",
+            "session_id": "real_part1_rag_start",
             "topic": context.topic,
             "difficulty": context.difficulty,
             "total_questions": context.total_questions,
@@ -88,17 +113,19 @@ def test_real_part1_candidate_profile_to_part2():
 
     data = response.json()
 
+    assert data["session_id"] == "real_part1_rag_start"
     assert data["status"] == "started"
     assert data["question"]
     assert data["topic"] == "Machine Learning"
 
 
-def test_real_part1_profile_full_interview():
+def test_real_part1_rag_full_interview_flow():
     candidate_profile = load_candidate_profile()
+    retrieval_results = get_real_part1_retrieval_results()
 
     context = build_interview_context(
         candidate_profile=candidate_profile,
-        retrieval_results=sample_retrieval_results(),
+        retrieval_results=retrieval_results,
         topic="Machine Learning",
         difficulty="medium",
         total_questions=2,
@@ -106,7 +133,7 @@ def test_real_part1_profile_full_interview():
         company_context="Recommendation Systems Company",
     )
 
-    session_id = "real_part1_full_flow"
+    session_id = "real_part1_rag_full_flow"
 
     start = client.post(
         "/interview/start",
@@ -123,14 +150,16 @@ def test_real_part1_profile_full_interview():
     )
 
     assert start.status_code == 200
+    assert start.json()["status"] == "started"
 
     first = client.post(
         "/interview/answer",
         json={
             "session_id": session_id,
             "candidate_answer": (
-                "Regularization helps reduce overfitting by adding "
-                "a penalty term to the loss function."
+                "Regularization reduces overfitting by adding a penalty "
+                "to the objective function and discouraging overly "
+                "complex model parameters."
             ),
         },
     )
@@ -141,15 +170,16 @@ def test_real_part1_profile_full_interview():
 
     assert first_data["status"] == "in_progress"
     assert "evaluation" in first_data
-    assert "next_question" in first_data
+    assert first_data["next_question"]
 
     second = client.post(
         "/interview/answer",
         json={
             "session_id": session_id,
             "candidate_answer": (
-                "Cross-validation evaluates model performance across "
-                "multiple train-validation splits."
+                "Cross-validation estimates generalization performance "
+                "by training and validating the model across multiple "
+                "different splits of the available dataset."
             ),
         },
     )
@@ -159,7 +189,20 @@ def test_real_part1_profile_full_interview():
     second_data = second.json()
 
     assert second_data["status"] == "completed"
+    assert "evaluation" in second_data
     assert "final_report" in second_data
+
+    report = client.get(
+        f"/interview/{session_id}/report"
+    )
+
+    assert report.status_code == 200
+
+    report_data = report.json()
+
+    assert "numerical_report" in report_data
+    assert "ai_summary" in report_data
+    assert "learning_plan" in report_data
 
     analytics = client.get(
         f"/interview/{session_id}/analytics"
@@ -169,4 +212,6 @@ def test_real_part1_profile_full_interview():
 
     analytics_data = analytics.json()
 
+    assert analytics_data["session_id"] == session_id
     assert len(analytics_data["question_records"]) == 2
+    assert "summary" in analytics_data

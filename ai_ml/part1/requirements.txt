@@ -1,0 +1,5 @@
+pymupdf
+pymilvus[milvus_lite]
+python-dotenv
+google-genai
+FlagEmbedding

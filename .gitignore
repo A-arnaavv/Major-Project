@@ -9,3 +9,9 @@ Part-1/data/raw/
 Part-1/data/processed/
 Part-1/data/milvus.db/
 ai_ml/integration/sample_part1_output/
+
+# Local candidate / generated RAG data
+data/raw/
+data/processed/
+data/milvus.db/
+data/milvus.db
