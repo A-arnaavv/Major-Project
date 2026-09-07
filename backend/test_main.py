@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from backend.main import app
 from backend.session_store import session_store
-
+from unittest.mock import patch
 
 client = TestClient(app)
 
@@ -389,3 +389,139 @@ def test_health_endpoint():
     assert data["service"] == "Interview Intelligence API"
     assert data["version"] == "0.1.0"
     assert data["llm_mode"] in {"mock", "real"}
+
+def test_next_question_returns_existing_pending_question():
+    start_response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "next_pending_session",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": 2,
+        },
+    )
+
+    assert start_response.status_code == 200
+
+    first_question = start_response.json()["question"]
+
+    session = session_store.get("next_pending_session")
+
+    assert session is not None
+    assert session.current_question is not None
+
+    with patch.object(
+        session,
+        "generate_next_question",
+        side_effect=AssertionError(
+            "GET /next should not generate a new question "
+            "when one is already pending"
+        ),
+    ):
+        response = client.get(
+            "/interview/next_pending_session/next"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["question"] == first_question
+
+
+def test_next_question_returns_question_created_after_answer():
+    start_response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "next_after_answer_session",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": 2,
+        },
+    )
+
+    assert start_response.status_code == 200
+
+    answer_response = client.post(
+        "/interview/answer",
+        json={
+            "session_id": "next_after_answer_session",
+            "candidate_answer": (
+                "A meaningful technical answer explaining "
+                "the relevant machine learning concept."
+            ),
+        },
+    )
+
+    assert answer_response.status_code == 200
+    assert answer_response.json()["status"] == "in_progress"
+
+    expected_next_question = (
+        answer_response.json()["next_question"]["question"]
+    )
+
+    session = session_store.get("next_after_answer_session")
+
+    assert session is not None
+    assert session.current_question is not None
+
+    with patch.object(
+        session,
+        "generate_next_question",
+        side_effect=AssertionError(
+            "GET /next should return the question already "
+            "generated after answer submission"
+        ),
+    ):
+        response = client.get(
+            "/interview/next_after_answer_session/next"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["question"] == expected_next_question
+
+def test_whitespace_only_session_id_rejected():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "   ",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": 2,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_whitespace_only_topic_rejected():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "whitespace_topic_session",
+            "topic": "   ",
+            "difficulty": "medium",
+            "total_questions": 2,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_start_interview_strips_session_id_and_topic():
+    response = client.post(
+        "/interview/start",
+        json={
+            "session_id": "  normalized_session  ",
+            "topic": "  Machine Learning  ",
+            "difficulty": "medium",
+            "total_questions": 2,
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["session_id"] == "normalized_session"
+    assert data["topic"] == "Machine Learning"
+
+    assert session_store.exists("normalized_session")
+    assert not session_store.exists("  normalized_session  ")
