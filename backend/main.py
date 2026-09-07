@@ -4,7 +4,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from ai_ml.interview_intelligence.session import InterviewSession
-
+from ai_ml.interview_intelligence.analytics_exporter import (
+    export_question_records,
+    export_interview_summary,
+)
 
 app = FastAPI(
     title="InterviewGPT - Interview Intelligence API",
@@ -225,4 +228,49 @@ def get_report(session_id: str):
         "numerical_report": numerical_report,
         "ai_summary": ai_summary.model_dump(),
         "learning_plan": learning_plan,
+    }
+
+@app.get("/interview/{session_id}/analytics")
+def get_analytics(session_id: str):
+
+    session = sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found"
+        )
+
+    try:
+        history = session.get_history()
+
+        question_records = export_question_records(
+            session_id=session_id,
+            history=history,
+        )
+
+        numerical_report = session.get_final_report()
+        ai_summary = session.get_ai_performance_summary()
+        learning_plan = session.get_learning_plan()
+
+        summary = export_interview_summary(
+            session_id=session_id,
+            numerical_report=numerical_report,
+            ai_summary=ai_summary,
+            learning_plan=learning_plan,
+        )
+
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc)
+        )
+
+    return {
+        "session_id": session_id,
+        "question_records": [
+            record.model_dump()
+            for record in question_records
+        ],
+        "summary": summary.model_dump(),
     }
