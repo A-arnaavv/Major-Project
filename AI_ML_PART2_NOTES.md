@@ -4,7 +4,7 @@
 
 This module handles the **Interview Intelligence** component of InterviewGPT AI.
 
-Its responsibility is to conduct an AI-powered technical interview, evaluate candidate answers, dynamically adjust interview difficulty, track candidate performance, generate final reports, and produce personalized learning recommendations.
+Its responsibility is to conduct an AI-powered technical interview, evaluate candidate answers, dynamically adjust interview difficulty, track candidate performance, generate reports, and produce personalized learning recommendations.
 
 The implementation supports:
 
@@ -17,7 +17,7 @@ The implementation supports:
 * improved answer generation
 * interview session/history tracking
 * subtopic-level performance tracking
-* final numerical reports
+* numerical performance reports
 * AI-generated performance summaries
 * personalized learning recommendations
 * multi-agent orchestration
@@ -26,6 +26,10 @@ The implementation supports:
 * Gemini reliability handling
 * mock and real LLM execution modes
 * FastAPI integration
+* session-storage abstraction
+* API health monitoring
+* API input validation and normalization
+* safe pending-question retrieval
 
 The current implementation uses the **Gemini API** for real LLM-based:
 
@@ -41,13 +45,13 @@ A deterministic **mock mode** is available for local development, integration wo
 
 The primary implementation is located under:
 
-```text id="ai2-structure"
+```text
 ai_ml/interview_intelligence/
 ```
 
 Current relevant structure:
 
-```text id="ai2-tree"
+```text
 Major-Project/
 │
 ├── AI_ML_PART2_NOTES.md
@@ -99,7 +103,7 @@ Major-Project/
 
 The manual CLI interview is deliberately named:
 
-```text id="ai2-cli-file"
+```text
 manual_interview_flow.py
 ```
 
@@ -135,7 +139,7 @@ In mock mode, deterministic questions are selected from a local question bank.
 
 Generated questions contain structured information including:
 
-```text id="ai2-question-output"
+```text
 question
 expected_concepts
 difficulty
@@ -181,7 +185,7 @@ The deterministic adaptive engine remains the final authority for interview diff
 
 The project supports:
 
-```text id="ai2-mock-env"
+```text
 LLM_MODE=mock
 ```
 
@@ -212,7 +216,7 @@ Mock mode is not intended to reproduce Gemini's semantic reasoning quality.
 
 For every evaluated answer, the system can produce:
 
-```text id="ai2-feedback"
+```text
 strengths
 weaknesses
 feedback
@@ -221,7 +225,7 @@ improved_answer
 
 This information is stored in interview history and can later be consumed by:
 
-* final reports
+* reports
 * frontend feedback views
 * analytics
 * learning recommendation workflows
@@ -232,7 +236,7 @@ This information is stored in interview history and can later be consumed by:
 
 Three difficulty levels are supported:
 
-```text id="ai2-difficulty"
+```text
 easy
 medium
 hard
@@ -242,7 +246,7 @@ Difficulty changes according to the candidate's overall score.
 
 Current rules:
 
-```text id="ai2-adaptive"
+```text
 overall_score > 7
 → increase difficulty
 
@@ -257,7 +261,7 @@ Boundary protection is implemented.
 
 Examples:
 
-```text id="ai2-adaptive-examples"
+```text
 medium + 8.0 → hard
 medium + 6.0 → medium
 medium + 3.0 → easy
@@ -297,7 +301,7 @@ The current question and expected concepts remain server-side.
 
 The candidate only needs to submit:
 
-```text id="ai2-answer"
+```text
 candidate_answer
 ```
 
@@ -313,7 +317,7 @@ An interview is configured with a fixed number of questions.
 
 Example:
 
-```text id="ai2-count"
+```text
 total_questions = 5
 ```
 
@@ -345,6 +349,10 @@ The numerical report does not depend on Gemini.
 
 This gives the project a deterministic quantitative reporting layer even when LLM-generated summarization is unavailable.
 
+Reports can also be requested during an active interview.
+
+In that case, the report represents **performance so far** rather than requiring the interview to already be complete.
+
 ---
 
 # 8. Subtopic / Skill Tracking
@@ -353,7 +361,7 @@ Generated questions identify a specific subtopic.
 
 Examples may include:
 
-```text id="ai2-subtopics"
+```text
 Bias-Variance Tradeoff
 Supervised Learning
 Overfitting
@@ -367,7 +375,7 @@ Advanced Model Evaluation
 
 Each interview-history record stores both:
 
-```text id="ai2-topic-subtopic"
+```text
 topic
 subtopic
 ```
@@ -380,11 +388,11 @@ This allows skill-level analytics instead of relying only on broad topics such a
 
 # 9. AI Performance Summary
 
-Gemini can generate a higher-level final performance summary.
+Gemini can generate a higher-level performance summary.
 
 The structured summary contains:
 
-```text id="ai2-summary"
+```text
 overall_performance
 strong_areas
 weak_areas
@@ -396,6 +404,10 @@ A deterministic mock version is available during mock-mode development and autom
 
 The AI summary complements rather than replaces the deterministic numerical report.
 
+For an active interview, the report endpoint may represent the interview performance collected so far.
+
+For a completed interview, it represents the final interview result.
+
 ---
 
 # 10. Personalized Learning Recommendations
@@ -404,7 +416,7 @@ A deterministic learning recommendation engine is implemented.
 
 It consumes:
 
-```text id="ai2-subtopic-input"
+```text
 subtopic_performance
 ```
 
@@ -412,7 +424,7 @@ and produces a prioritized study plan.
 
 Each learning-plan item contains:
 
-```text id="ai2-learning-item"
+```text
 priority
 subtopic
 current_score
@@ -422,7 +434,7 @@ recommended_action
 
 Current performance levels are:
 
-```text id="ai2-learning-levels"
+```text
 Strong
 Moderate
 Weak
@@ -431,7 +443,7 @@ Critical
 
 Current thresholds:
 
-```text id="ai2-learning-thresholds"
+```text
 score >= 8 → Strong
 score >= 6 → Moderate
 score >= 4 → Weak
@@ -448,7 +460,7 @@ The recommendations range from advanced practice for strong areas to fundamental
 
 Interview Intelligence uses a multi-agent architecture.
 
-```text id="ai2-agents"
+```text
 InterviewSession
        ↓
 InterviewOrchestrator
@@ -505,7 +517,7 @@ AI/ML Part 2 can consume optional context produced by AI/ML Part 1.
 
 Supported fields:
 
-```python id="ai2-part1-fields"
+```python
 resume_context: str | None
 job_role: str | None
 company_context: str | None
@@ -514,7 +526,7 @@ retrieved_context: str | None
 
 Example:
 
-```python id="ai2-part1-example"
+```python
 session = InterviewSession(
     topic="Machine Learning",
     difficulty="medium",
@@ -560,13 +572,13 @@ Part 2 does **not** duplicate resume parsing, RAG, embeddings, vector storage, o
 
 Integration contracts are defined in:
 
-```text id="ai2-integration-schema"
+```text
 ai_ml/interview_intelligence/integration_schemas.py
 ```
 
 Important schemas include:
 
-```text id="ai2-schema-names"
+```text
 InterviewContext
 QuestionAnalyticsRecord
 LearningPlanItem
@@ -575,7 +587,7 @@ InterviewSummaryAnalytics
 
 These schemas provide stable interfaces between:
 
-```text id="ai2-contract-flow"
+```text
 AI/ML Part 1
       ↓
 Interview Intelligence
@@ -591,9 +603,9 @@ They should be treated as team integration contracts rather than passing arbitra
 
 # 14. Current Interview Flow
 
-The complete flow is:
+The normal interview flow is:
 
-```text id="ai2-flow"
+```text
 Part 1 Context
       ↓
 FastAPI
@@ -639,6 +651,22 @@ Personalized Learning Plan
 Analytics Exporter
 ```
 
+The normal API flow generates questions through:
+
+```text
+POST /interview/start
+```
+
+for the first question and:
+
+```text
+POST /interview/answer
+```
+
+for subsequent questions.
+
+The `/next` endpoint does not independently advance the interview when a question is already pending.
+
 ---
 
 # 15. Backend API
@@ -647,13 +675,13 @@ A FastAPI backend exposes Interview Intelligence to the frontend and other proje
 
 Main file:
 
-```text id="ai2-backend-main"
+```text
 backend/main.py
 ```
 
 Current endpoints:
 
-```text id="ai2-endpoints"
+```text
 GET  /
 GET  /health
 
@@ -679,7 +707,7 @@ Provides a lightweight application health check.
 
 Example response:
 
-```json id="ai2-health"
+```json
 {
   "status": "healthy",
   "service": "Interview Intelligence API",
@@ -704,7 +732,7 @@ Starts a new interview and generates the first question.
 
 Example request:
 
-```json id="ai2-start"
+```json
 {
   "session_id": "candidate_001",
   "topic": "Machine Learning",
@@ -719,12 +747,34 @@ Example request:
 
 The API validates:
 
-```text id="ai2-validation"
-session_id       minimum length 1
-topic            minimum length 1
+```text
+session_id       required non-whitespace text
+topic            required non-whitespace text
 difficulty       easy | medium | hard
 total_questions  1–20
 ```
+
+`session_id` and `topic` are normalized before use.
+
+Leading and trailing whitespace is removed.
+
+For example:
+
+```text
+"  candidate_001  "
+→ "candidate_001"
+
+"  Machine Learning  "
+→ "Machine Learning"
+```
+
+Whitespace-only values such as:
+
+```text
+"   "
+```
+
+are rejected with HTTP `422`.
 
 Expected concepts are intentionally not returned to the candidate.
 
@@ -738,7 +788,7 @@ Submits the candidate's answer.
 
 Example:
 
-```json id="ai2-submit"
+```json
 {
   "session_id": "candidate_001",
   "candidate_answer": "Candidate answer here"
@@ -758,19 +808,52 @@ For a completed interview, the API returns:
 * AI performance summary
 * personalized learning plan
 
+An empty candidate answer remains valid input.
+
+This is intentional because the evaluator handles no-answer behavior and assigns an appropriate low/zero score instead of treating the request itself as invalid.
+
 ---
 
 ## GET /interview/{session_id}/next
 
-Provides another question for an existing active interview session.
+Returns the currently pending unanswered question for an active interview.
 
-The normal flow generally receives the next question directly from:
+Important behavior:
 
-```text id="ai2-normal-flow"
-POST /interview/answer
+```text
+POST /interview/start
+      ↓
+Question 1 is generated
+      ↓
+GET /interview/{session_id}/next
+      ↓
+Question 1 is returned again
 ```
 
-The endpoint rejects missing sessions and completed interviews.
+The endpoint does **not** generate Question 2 merely because `/next` was called.
+
+Similarly:
+
+```text
+POST /interview/answer
+      ↓
+Current answer is evaluated
+      ↓
+Question 2 is generated
+      ↓
+GET /interview/{session_id}/next
+      ↓
+Question 2 is returned
+```
+
+This protects against accidentally skipping an unanswered question.
+
+If no current question exists for a valid active session, the endpoint may generate one as a fallback.
+
+The endpoint rejects:
+
+* missing sessions with HTTP `404`
+* completed interviews with HTTP `400`
 
 ---
 
@@ -784,6 +867,24 @@ Returns:
 
 for the specified interview session.
 
+The endpoint is intentionally usable for both active and completed interviews.
+
+For an active interview:
+
+```text
+/report
+→ performance so far
+```
+
+For a completed interview:
+
+```text
+/report
+→ final accumulated performance
+```
+
+The authoritative final report is also returned automatically when the candidate submits the final interview answer.
+
 ---
 
 ## GET /interview/{session_id}/analytics
@@ -792,13 +893,19 @@ Returns analytics-ready question-level records and the session-level summary.
 
 Response structure:
 
-```json id="ai2-analytics-response"
+```json
 {
   "session_id": "candidate_001",
   "question_records": [],
   "summary": {}
 }
 ```
+
+The endpoint can be used during an active interview to inspect/export data collected so far.
+
+It does not mutate interview state.
+
+For a completed interview, it represents the complete interview analytics output.
 
 This endpoint provides the primary backend handoff to the analytics side of the project.
 
@@ -808,13 +915,13 @@ This endpoint provides the primary backend handoff to the analytics side of the 
 
 Session storage is isolated in:
 
-```text id="ai2-session-store-file"
+```text
 backend/session_store.py
 ```
 
 The backend uses:
 
-```text id="ai2-storage-flow"
+```text
 FastAPI Routes
       ↓
 SessionStore
@@ -824,7 +931,7 @@ InterviewSession
 
 `SessionStore` currently supports:
 
-```text id="ai2-store-methods"
+```text
 create
 get
 delete
@@ -840,7 +947,7 @@ The implementation remains **in-memory**.
 
 Therefore:
 
-```text id="ai2-storage-limitation"
+```text
 Server restart
       ↓
 Active sessions are lost
@@ -864,19 +971,19 @@ Database-specific logic should remain separate from the AI/ML Part 2 core where 
 
 From the project root, create a virtual environment if required:
 
-```bash id="ai2-venv"
+```bash
 python3 -m venv .venv
 ```
 
 Activate it on macOS/Linux:
 
-```bash id="ai2-activate"
+```bash
 source .venv/bin/activate
 ```
 
 Install dependencies:
 
-```bash id="ai2-install"
+```bash
 pip install -r requirements.txt
 ```
 
@@ -888,7 +995,7 @@ Create a `.env` file in the project root.
 
 Example:
 
-```text id="ai2-env"
+```text
 GEMINI_API_KEY=your_api_key_here
 GEMINI_MODEL=your_available_gemini_model
 LLM_MODE=mock
@@ -898,7 +1005,7 @@ Never commit `.env` or API credentials.
 
 `.gitignore` should contain:
 
-```text id="ai2-gitignore"
+```text
 .env
 .venv/
 venv/
@@ -913,7 +1020,7 @@ __pycache__/
 
 For normal development and automated testing:
 
-```text id="ai2-mock"
+```text
 LLM_MODE=mock
 ```
 
@@ -938,13 +1045,13 @@ Mock mode should not require an API key or instantiate a Gemini client before re
 
 For real LLM testing:
 
-```text id="ai2-real"
+```text
 LLM_MODE=real
 ```
 
 Real mode uses Gemini for:
 
-```text id="ai2-real-uses"
+```text
 Question Generation
 Answer Evaluation
 Performance Summary
@@ -952,19 +1059,19 @@ Performance Summary
 
 The configured Gemini model is loaded from:
 
-```text id="ai2-model"
+```text
 GEMINI_MODEL
 ```
 
 The API key is loaded from:
 
-```text id="ai2-key"
+```text
 GEMINI_API_KEY
 ```
 
 After controlled real-mode smoke testing, switch back to:
 
-```text id="ai2-back-mock"
+```text
 LLM_MODE=mock
 ```
 
@@ -976,13 +1083,13 @@ for normal development.
 
 A centralized Gemini reliability helper is implemented in:
 
-```text id="ai2-gemini-utils"
+```text
 ai_ml/interview_intelligence/gemini_utils.py
 ```
 
 Gemini calls from:
 
-```text id="ai2-gemini-users"
+```text
 question_generator.py
 evaluator.py
 performance_summary.py
@@ -992,7 +1099,7 @@ use the shared retry helper.
 
 Handled transient status codes include:
 
-```text id="ai2-transient"
+```text
 408
 429
 500
@@ -1019,7 +1126,7 @@ Structured Gemini responses are validated using Pydantic.
 
 If Gemini returns malformed structured output, the system converts the problem into a controlled:
 
-```text id="ai2-runtime"
+```text
 RuntimeError
 ```
 
@@ -1035,16 +1142,26 @@ The FastAPI layer handles important failure cases.
 
 Current behavior includes:
 
-```text id="ai2-errors"
-Invalid request schema          → HTTP 422
-Invalid difficulty              → HTTP 422
-Invalid total_questions         → HTTP 422
-Empty session_id/topic          → HTTP 422
-Duplicate session               → HTTP 400
-Missing interview session       → HTTP 404
-Question after completion       → HTTP 400
-Gemini/runtime failure          → HTTP 503
+```text
+Invalid request schema              → HTTP 422
+Invalid difficulty                  → HTTP 422
+Invalid total_questions             → HTTP 422
+Empty session_id/topic              → HTTP 422
+Whitespace-only session_id/topic    → HTTP 422
+Duplicate session                   → HTTP 400
+Missing interview session           → HTTP 404
+Question after completion           → HTTP 400
+Gemini/runtime failure              → HTTP 503
 ```
+
+Input normalization currently includes:
+
+```text
+session_id → strip leading/trailing whitespace
+topic      → strip leading/trailing whitespace
+```
+
+`candidate_answer` intentionally does not require a non-empty value because a missing/no-answer response is a valid interview outcome handled by the evaluator.
 
 If first-question generation fails during interview creation, the newly created session is removed from the store.
 
@@ -1056,7 +1173,7 @@ This avoids leaving a partially initialized interview session behind.
 
 Analytics export logic is implemented in:
 
-```text id="ai2-exporter"
+```text
 ai_ml/interview_intelligence/analytics_exporter.py
 ```
 
@@ -1066,7 +1183,7 @@ Two major output types are provided.
 
 Each question can be exported with:
 
-```text id="ai2-question-analytics"
+```text
 session_id
 question_number
 topic
@@ -1090,7 +1207,7 @@ next_difficulty
 
 The session summary contains:
 
-```text id="ai2-session-analytics"
+```text
 session_id
 total_questions
 average_score
@@ -1107,6 +1224,8 @@ learning_plan
 ```
 
 These contracts allow the analytics team to consume interview results without depending on internal `InterviewSession` implementation details.
+
+Analytics may be retrieved before completion to represent performance collected so far.
 
 ---
 
@@ -1128,13 +1247,15 @@ Question-level data supports analytics such as:
 
 A useful analytics design is:
 
-```text id="ai2-analytics-design"
+```text
 Question-Level Dataset
 → one row per interview question
 
 Session-Level Dataset
-→ one row per completed interview
+→ one row per interview/session snapshot
 ```
+
+For persistent final reporting, the analytics/database layer may choose to store one final session row per completed interview.
 
 Nested data such as `subtopic_performance` and `learning_plan` can be stored as JSON or normalized depending on the database and analytics architecture selected by the team.
 
@@ -1144,20 +1265,20 @@ Nested data such as `subtopic_performance` and `learning_plan` can be stored as 
 
 For normal tests, configure:
 
-```text id="ai2-test-mode"
+```text
 LLM_MODE=mock
 ```
 
 Run the complete Part 2 + backend/storage suite from the project root:
 
-```bash id="ai2-full-tests"
+```bash
 python3 -m pytest ai_ml/interview_intelligence/tests backend/test_main.py backend/test_session_store.py -v
 ```
 
 Current verified result:
 
-```text id="ai2-passing"
-46 passed
+```text
+51 passed
 ```
 
 The verified suite covers:
@@ -1194,15 +1315,24 @@ The verified suite covers:
 * missing request-field rejection
 * completed-interview edge cases
 * health endpoint
+* pending-question retrieval
+* `/next` question-skip prevention
+* post-answer pending-question retrieval
+* whitespace-only session ID rejection
+* whitespace-only topic rejection
+* session ID normalization
+* topic normalization
 * SessionStore creation/retrieval
 * SessionStore existence checks
 * SessionStore duplicate protection
 * SessionStore deletion
 * SessionStore cleanup
 
-The latest verified run completed all **46 tests successfully**.
+The latest verified run completed all **51 tests successfully**.
 
-Two dependency-level deprecation warnings may currently appear from FastAPI/Starlette test dependencies. They do not represent failing project tests.
+Two dependency-level deprecation warnings may currently appear from FastAPI/Starlette test dependencies.
+
+They do not represent failing project tests.
 
 ---
 
@@ -1212,7 +1342,7 @@ A complete real-mode smoke test has been successfully performed.
 
 The test used Part 1-style context including:
 
-```text id="ai2-smoke-context"
+```text
 Resume Context:
 Python and NLP experience
 
@@ -1234,7 +1364,7 @@ Gemini correctly identified the answer as largely irrelevant and assigned a very
 
 The deterministic adaptive engine then reduced difficulty:
 
-```text id="ai2-smoke-adaptive"
+```text
 medium → easy
 ```
 
@@ -1242,7 +1372,7 @@ The final performance summary identified relevant weaknesses.
 
 This validated the real end-to-end flow:
 
-```text id="ai2-smoke-flow"
+```text
 Part 1 Context
       ↓
 InterviewerAgent
@@ -1270,7 +1400,7 @@ The manual CLI interview is intentionally not named with the pytest `test_` pref
 
 Run:
 
-```bash id="ai2-manual"
+```bash
 python3 -m ai_ml.interview_intelligence.tests.manual_interview_flow
 ```
 
@@ -1282,19 +1412,19 @@ This allows an interactive terminal interview without pytest attempting to captu
 
 From the project root:
 
-```bash id="ai2-run-api"
+```bash
 uvicorn backend.main:app --reload
 ```
 
 Development server:
 
-```text id="ai2-server"
+```text
 http://127.0.0.1:8000
 ```
 
 Swagger:
 
-```text id="ai2-swagger"
+```text
 http://127.0.0.1:8000/docs
 ```
 
@@ -1302,10 +1432,12 @@ Swagger can be used to exercise the API without a frontend.
 
 Useful endpoints include:
 
-```text id="ai2-swagger-endpoints"
+```text
+GET  /
 GET  /health
 POST /interview/start
 POST /interview/answer
+GET  /interview/{session_id}/next
 GET  /interview/{session_id}/report
 GET  /interview/{session_id}/analytics
 ```
@@ -1318,13 +1450,13 @@ GET  /interview/{session_id}/analytics
 
 Production code must never import anything from:
 
-```text id="ai2-tests-dir"
+```text
 tests/
 ```
 
 Correct dependency direction:
 
-```text id="ai2-correct-dependency"
+```text
 tests
   ↓
 production code
@@ -1332,7 +1464,7 @@ production code
 
 Incorrect:
 
-```text id="ai2-wrong-dependency"
+```text
 production code
   ↓
 tests
@@ -1360,6 +1492,25 @@ Adaptive difficulty, numerical aggregation, and learning-plan prioritization sho
 
 Gemini should complement these systems rather than unnecessarily replacing them.
 
+## Pending Questions Must Not Be Skipped
+
+Once an interview question has been generated, retrieval endpoints should return that pending question rather than silently generate a different one.
+
+Question progression should occur only through the intended interview workflow.
+
+## Read-Only Endpoints Must Not Mutate Interview State
+
+Endpoints such as:
+
+```text
+GET /health
+GET /interview/{session_id}/report
+GET /interview/{session_id}/analytics
+GET /interview/{session_id}/next
+```
+
+should not unexpectedly advance completed interview history or alter submitted-answer state.
+
 ---
 
 # 31. Current Limitations
@@ -1380,7 +1531,7 @@ Persistent storage remains a team-integration task.
 
 Part 1 integration currently accepts optional string context:
 
-```text id="ai2-part1-current"
+```text
 resume_context
 job_role
 company_context
@@ -1403,6 +1554,12 @@ Real mode depends on Gemini API availability, configuration, quota, and network 
 
 The reliability layer reduces the impact of transient failures but cannot guarantee external-service availability.
 
+## In-Memory Multi-Process Limitation
+
+Because active interview state is currently stored in local process memory, multiple independent API workers would not automatically share sessions.
+
+Production deployment with multiple workers will require persistent/shared storage.
+
 ---
 
 # 32. Current Status
@@ -1411,7 +1568,7 @@ The core Interview Intelligence component is functionally complete for the assig
 
 Current status:
 
-```text id="ai2-status"
+```text
 Question Generation                    ✓ Complete
 LLM Answer Evaluation                  ✓ Complete
 Structured Scoring                     ✓ Complete
@@ -1433,11 +1590,14 @@ Integration Schemas                    ✓ Complete
 Analytics Exporter                     ✓ Complete
 FastAPI Integration                    ✓ Complete
 API Input Validation                   ✓ Complete
+Whitespace Validation                  ✓ Complete
+Input Normalization                    ✓ Complete
 SessionStore Abstraction               ✓ Complete
 Health Endpoint                        ✓ Complete
+Safe /next Question Semantics          ✓ Complete
 Hidden Evaluation Rubric               ✓ Complete
 Real Gemini Smoke Test                 ✓ Passed
-Automated Testing                      ✓ 46 Passing
+Automated Testing                      ✓ 51 Passing
 ```
 
 ---
@@ -1446,7 +1606,7 @@ Automated Testing                      ✓ 46 Passing
 
 Remaining work is primarily full-project integration and production polish rather than missing core AI/ML Part 2 functionality.
 
-```text id="ai2-remaining"
+```text
 Persistent Database Integration        Pending Team Integration
 Frontend Integration                   Pending Team Integration
 Final Part 1 Data Contract Refinement  Pending Team Merge
@@ -1458,16 +1618,22 @@ Final Demo / Presentation Cleanup      Pending Final Project Stage
 
 These tasks depend partly on the other project components and should be coordinated at the team level.
 
+The Part 2 API contract should now remain relatively stable while integration work proceeds.
+
 ---
 
 # 34. Handoff Summary
 
 AI/ML Part 2 now provides an Interview Intelligence system that can:
 
-```text id="ai2-handoff"
+```text
 Accept Part 1 Candidate Context
         ↓
+Normalize and Validate Interview Input
+        ↓
 Generate Personalized Questions
+        ↓
+Maintain Pending Question State
         ↓
 Evaluate Candidate Answers
         ↓
@@ -1494,15 +1660,22 @@ Export Analytics-Ready Records
 
 The component has been validated in:
 
-```text id="ai2-validation-modes"
+```text
 Mock Mode
 Real Gemini Mode
 ```
 
 The current automated baseline is:
 
-```text id="ai2-baseline"
-46 passing tests
+```text
+51 passing tests
 ```
 
-The module is ready for integration with AI/ML Part 1, frontend/backend components, persistent storage, and the analytics/BI workflow.
+The module is ready for integration with:
+
+* AI/ML Part 1
+* frontend components
+* persistent backend storage
+* analytics pipelines
+* BI/dashboard components
+* full-system end-to-end testing

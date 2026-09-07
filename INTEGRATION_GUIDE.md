@@ -23,6 +23,9 @@ This module owns:
 * analytics-ready export records
 * multi-agent interview orchestration
 * Gemini reliability handling
+* API input validation
+* session-storage abstraction
+* safe pending-question retrieval
 
 The module is designed to consume outputs from AI/ML Part 1 and expose structured outputs to backend, analytics, and dashboard components.
 
@@ -174,7 +177,11 @@ Example response:
 
 The `llm_mode` field indicates whether the application is currently configured for mock or real Gemini execution.
 
-The endpoint intentionally does not call Gemini so health monitoring does not consume API quota or become dependent on temporary external LLM availability.
+The endpoint intentionally does not call Gemini, so health monitoring:
+
+* does not consume Gemini quota
+* remains fast
+* does not depend on temporary external LLM availability
 
 ---
 
@@ -218,14 +225,36 @@ Example response:
 
 The API validates interview-start requests before creating a session.
 
-Current rules include:
+Current rules:
 
 ```text
-session_id       required, minimum length 1
-topic            required, minimum length 1
+session_id       required non-whitespace text
+topic            required non-whitespace text
 difficulty       easy | medium | hard
 total_questions  minimum 1, maximum 20
 ```
+
+`session_id` and `topic` are normalized before use.
+
+Leading and trailing whitespace is removed.
+
+Examples:
+
+```text
+"  candidate_001  "
+→ "candidate_001"
+
+"  Machine Learning  "
+→ "Machine Learning"
+```
+
+Whitespace-only values such as:
+
+```text
+"   "
+```
+
+are rejected with HTTP `422`.
 
 Invalid request structures are rejected by FastAPI/Pydantic with HTTP `422`.
 
@@ -252,7 +281,9 @@ Example request:
 
 The candidate does not submit the original question or expected concepts.
 
-Those are maintained server-side by the interview session. This prevents the client from modifying evaluation context.
+Those are maintained server-side by the interview session.
+
+This prevents the client from modifying evaluation context.
 
 The evaluation contains:
 
@@ -282,6 +313,10 @@ The deterministic adaptive engine is the actual source of truth for the next int
 When more questions remain, the API returns the next question automatically.
 
 When the configured question count is reached, it returns the final report.
+
+An empty `candidate_answer` remains valid input.
+
+This is intentional because a no-answer response is a legitimate interview outcome and is handled by the evaluator rather than rejected at the API boundary.
 
 ---
 
@@ -320,7 +355,7 @@ This deterministic rule prevents LLM variability from directly controlling inter
 
 ---
 
-# 8. Retrieving the Next Question
+# 8. Retrieving the Pending Question
 
 Use:
 
@@ -334,15 +369,47 @@ Example:
 GET /interview/candidate_001/next
 ```
 
-This endpoint returns the current/next interview question for an active session.
+This endpoint returns the currently pending unanswered question for an active interview.
+
+Important behavior:
+
+```text
+POST /interview/start
+        ↓
+Question 1 generated
+        ↓
+GET /interview/{session_id}/next
+        ↓
+Question 1 returned again
+```
+
+Calling `/next` does **not** generate Question 2 when Question 1 is still pending.
+
+Similarly:
+
+```text
+POST /interview/answer
+        ↓
+Current answer evaluated
+        ↓
+Question 2 generated
+        ↓
+GET /interview/{session_id}/next
+        ↓
+Question 2 returned
+```
+
+This prevents the client from accidentally skipping an unanswered question.
+
+If a valid active session has no current question, the endpoint may generate one as a fallback.
 
 Missing sessions return HTTP `404`.
 
-Requests for another question after the interview has completed return HTTP `400`.
+Requests after the interview has completed return HTTP `400`.
 
 ---
 
-# 9. Final Performance Report
+# 9. Performance Report
 
 Use:
 
@@ -350,7 +417,7 @@ Use:
 GET /interview/{session_id}/report
 ```
 
-The final report contains:
+The report contains:
 
 ```text
 numerical_report
@@ -360,7 +427,7 @@ learning_plan
 
 The numerical report contains aggregate metrics such as:
 
-* total questions
+* total questions answered so far
 * average score
 * average technical accuracy
 * average relevance
@@ -378,7 +445,23 @@ The AI summary contains:
 
 The learning plan prioritizes weaker subtopics and provides recommended next actions.
 
-A final report is also returned automatically when the final interview answer is submitted.
+The endpoint is intentionally available for both active and completed interviews.
+
+For an active interview:
+
+```text
+/report
+→ performance so far
+```
+
+For a completed interview:
+
+```text
+/report
+→ final accumulated performance
+```
+
+The authoritative final report is also returned automatically when the final interview answer is submitted.
 
 ---
 
@@ -399,7 +482,7 @@ Score < 4   → Critical
 
 Recommendations become progressively more fundamental as the score decreases.
 
-Examples include:
+Examples:
 
 ```text
 Strong
@@ -454,6 +537,10 @@ The schemas are defined in:
 ```text
 ai_ml/interview_intelligence/integration_schemas.py
 ```
+
+The analytics endpoint does not mutate interview state.
+
+It may be used during an active interview to obtain data collected so far, or after completion to obtain the full interview analytics output.
 
 ---
 
@@ -541,6 +628,10 @@ This object is intended for:
 * learning recommendation views
 * historical performance tracking
 
+For active interviews, it represents the current session snapshot.
+
+For completed interviews, it represents the complete session result.
+
 ---
 
 # 14. Analytics Team Recommendation
@@ -549,7 +640,7 @@ For storage, the analytics team can conceptually maintain two datasets.
 
 ## Question-Level Dataset
 
-One row per interview question.
+One row per answered interview question.
 
 Suggested columns:
 
@@ -571,7 +662,7 @@ Additional text fields such as feedback, strengths, weaknesses, and improved ans
 
 ## Session-Level Dataset
 
-One row per completed interview.
+For final historical storage, one row per completed interview is recommended.
 
 Suggested columns:
 
@@ -585,6 +676,8 @@ average_clarity
 average_completeness
 overall_performance
 ```
+
+During an active interview, the `/analytics` response can also be treated as a temporary session snapshot.
 
 `subtopic_performance` and `learning_plan` can be stored as JSON or normalized into separate tables depending on the analytics architecture.
 
@@ -669,6 +762,8 @@ Mock mode avoids Gemini API calls and produces deterministic outputs.
 
 It also allows other team members to develop against Part 2 without requiring Gemini credentials.
 
+Mock mode should not require a Gemini API key or instantiate a Gemini client before entering the mock execution path.
+
 ## Real Gemini Mode
 
 Used for real AI-generated interview behavior.
@@ -682,8 +777,6 @@ GEMINI_MODEL=YOUR_MODEL
 ```
 
 Never commit `.env` or API credentials to Git.
-
-Mock mode should not require a Gemini API key or instantiate a Gemini client before entering the mock execution path.
 
 ---
 
@@ -803,26 +896,75 @@ This boundary should be maintained during integration to prevent duplicated pipe
 
 ---
 
-# 20. API Error Behavior
+# 20. API Error and Validation Behavior
 
 Important API behavior currently includes:
 
 ```text
-Invalid request schema          → 422
-Invalid difficulty              → 422
-Invalid total_questions         → 422
-Empty session_id/topic          → 422
-Duplicate session               → 400
-Missing interview session       → 404
-Question after completion       → 400
-Part 2 runtime/LLM failure      → 503
+Invalid request schema              → 422
+Invalid difficulty                  → 422
+Invalid total_questions             → 422
+Empty session_id/topic              → 422
+Whitespace-only session_id/topic    → 422
+Duplicate session                   → 400
+Missing interview session           → 404
+Question after completion           → 400
+Part 2 runtime/LLM failure          → 503
 ```
 
-These responses give frontend and integration code predictable failure behavior.
+Input normalization includes:
+
+```text
+session_id → strip leading/trailing whitespace
+topic      → strip leading/trailing whitespace
+```
+
+`candidate_answer` is intentionally allowed to be empty because a no-answer response should be evaluated rather than rejected as a malformed API request.
+
+If first-question generation fails during interview creation, the newly created session is removed from `SessionStore`.
+
+This avoids leaving partially initialized sessions behind.
 
 ---
 
-# 21. Automated Testing
+# 21. API State-Safety Rules
+
+The API follows several important state-management rules.
+
+## Pending Questions Must Not Be Skipped
+
+Once a question has been generated, `/next` returns that question instead of silently generating another one.
+
+Question progression happens through the normal answer-submission flow.
+
+## Evaluation Context Remains Server-Side
+
+The frontend submits the candidate answer only.
+
+The question and expected concepts are maintained by the server.
+
+## Read-Oriented Endpoints Should Not Advance the Interview
+
+The following endpoints should not unexpectedly advance interview history:
+
+```text
+GET /
+GET /health
+GET /interview/{session_id}/next
+GET /interview/{session_id}/report
+GET /interview/{session_id}/analytics
+```
+
+The normal mutation/progression flow occurs through:
+
+```text
+POST /interview/start
+POST /interview/answer
+```
+
+---
+
+# 22. Automated Testing
 
 Current test coverage includes:
 
@@ -852,11 +994,18 @@ Current test coverage includes:
 * SessionStore duplicate protection
 * SessionStore deletion
 * SessionStore cleanup
+* pending-question retrieval
+* `/next` question-skip prevention
+* retrieval of the post-answer pending question
+* whitespace-only session ID rejection
+* whitespace-only topic rejection
+* session ID normalization
+* topic normalization
 
 Current verified result:
 
 ```text
-46 passed
+51 passed
 ```
 
 Run all relevant tests with:
@@ -871,11 +1020,13 @@ For normal automated testing, use:
 LLM_MODE=mock
 ```
 
-The current environment may display dependency deprecation warnings related to FastAPI/Starlette test dependencies. These warnings do not represent failing project tests.
+The current environment may display two dependency deprecation warnings related to FastAPI/Starlette test dependencies.
+
+These warnings do not represent failing project tests.
 
 ---
 
-# 22. Real Gemini Smoke Testing
+# 23. Real Gemini Smoke Testing
 
 The Interview Intelligence pipeline has also been tested in real Gemini mode through an end-to-end smoke test.
 
@@ -895,13 +1046,23 @@ Deterministic difficulty adaptation
 Final performance summary
 ```
 
+The test used candidate context related to Python/NLP, an ML Engineer role, recommendation systems, and retrieved embedding/ranking concepts.
+
+Gemini generated a context-aware question.
+
+An intentionally unrelated candidate answer was correctly identified as poor/irrelevant.
+
+The deterministic adaptive engine reduced difficulty appropriately.
+
+The final summary identified relevant weaknesses.
+
 This confirms that mock-mode automated tests and real Gemini execution both exercise the intended architecture.
 
 For normal development and CI-style testing, continue using mock mode to avoid unnecessary API usage and non-deterministic test behavior.
 
 ---
 
-# 23. Recommended Team Integration Flow
+# 24. Recommended Team Integration Flow
 
 The intended full-system flow is:
 
@@ -925,7 +1086,7 @@ Question-Level Evaluation
           ↓
 Adaptive Interview
           ↓
-Final Performance Report
+Performance Report
           ↓
 Analytics Exporter
           ↓
@@ -944,15 +1105,21 @@ These schemas should be treated as the contract between team components.
 
 ---
 
-# 24. Integration Checklist
+# 25. Integration Checklist
 
 Before full team integration, verify:
 
 * AI/ML Part 1 can populate the optional context fields.
 * Backend/frontend uses a unique `session_id`.
+* Leading/trailing whitespace in `session_id` and `topic` is safely normalized.
+* Whitespace-only `session_id` and `topic` values are rejected.
 * Frontend sends only the candidate answer for answer submission.
+* Empty candidate answers remain valid interview responses.
 * Difficulty values are `easy`, `medium`, or `hard`.
 * Interview length is between 1 and 20 questions.
+* `/next` returns the pending question instead of skipping ahead.
+* `/report` can be used for performance-so-far or completed-interview reporting.
+* `/analytics` can be used for active-session snapshots or completed-interview analytics.
 * Development and integration environments use `LLM_MODE=mock` when real Gemini behavior is unnecessary.
 * Real deployments provide Gemini configuration securely.
 * Analytics consumes the exported question-level and session-level schemas.
@@ -961,4 +1128,4 @@ Before full team integration, verify:
 * `/health` can be used for lightweight service checks.
 * The full automated test suite remains green before merging.
 
-At the current checkpoint, the Interview Intelligence module is integration-ready with a verified **46-test passing baseline**.
+At the current checkpoint, the Interview Intelligence module is integration-ready with a verified **51-test passing baseline**.
