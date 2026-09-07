@@ -1,5 +1,3 @@
-from typing import Dict
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -8,13 +6,13 @@ from ai_ml.interview_intelligence.analytics_exporter import (
     export_question_records,
     export_interview_summary,
 )
+from backend.session_store import session_store
+
 
 app = FastAPI(
     title="InterviewGPT - Interview Intelligence API",
-    version="0.1.0"
+    version="0.1.0",
 )
-
-sessions: Dict[str, InterviewSession] = {}
 
 
 class StartInterviewRequest(BaseModel):
@@ -38,17 +36,16 @@ class SubmitAnswerRequest(BaseModel):
 def root():
     return {
         "status": "running",
-        "service": "Interview Intelligence API"
+        "service": "Interview Intelligence API",
     }
 
 
 @app.post("/interview/start")
 def start_interview(data: StartInterviewRequest):
-
-    if data.session_id in sessions:
+    if session_store.exists(data.session_id):
         raise HTTPException(
             status_code=400,
-            detail="Session already exists"
+            detail="Session already exists",
         )
 
     session = InterviewSession(
@@ -61,17 +58,28 @@ def start_interview(data: StartInterviewRequest):
         retrieved_context=data.retrieved_context,
     )
 
-    sessions[data.session_id] = session
-
     try:
+        session_store.create(
+            session_id=data.session_id,
+            session=session,
+        )
+
         question = session.generate_next_question()
 
-    except (ValueError, RuntimeError) as exc:
-        sessions.pop(data.session_id, None)
+    except ValueError as exc:
+        session_store.delete(data.session_id)
 
         raise HTTPException(
-            status_code=500,
-            detail=str(exc)
+            status_code=400,
+            detail=str(exc),
+        )
+
+    except RuntimeError as exc:
+        session_store.delete(data.session_id)
+
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
         )
 
     return {
@@ -86,13 +94,12 @@ def start_interview(data: StartInterviewRequest):
 
 @app.post("/interview/answer")
 def submit_answer(data: SubmitAnswerRequest):
-
-    session = sessions.get(data.session_id)
+    session = session_store.get(data.session_id)
 
     if not session:
         raise HTTPException(
             status_code=404,
-            detail="Session not found"
+            detail="Session not found",
         )
 
     try:
@@ -103,17 +110,16 @@ def submit_answer(data: SubmitAnswerRequest):
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     if session.is_complete():
-
         try:
             numerical_report = session.get_final_report()
             ai_summary = session.get_ai_performance_summary()
@@ -122,7 +128,7 @@ def submit_answer(data: SubmitAnswerRequest):
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=503,
-                detail=str(exc)
+                detail=str(exc),
             )
 
         return {
@@ -134,16 +140,22 @@ def submit_answer(data: SubmitAnswerRequest):
                 "numerical_report": numerical_report,
                 "ai_summary": ai_summary.model_dump(),
                 "learning_plan": learning_plan,
-            }
+            },
         }
 
     try:
         next_question = session.generate_next_question()
 
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     return {
@@ -156,25 +168,24 @@ def submit_answer(data: SubmitAnswerRequest):
             "difficulty": next_question.difficulty,
             "topic": next_question.topic,
             "subtopic": next_question.subtopic,
-        }
+        },
     }
 
 
 @app.get("/interview/{session_id}/next")
 def next_question(session_id: str):
-
-    session = sessions.get(session_id)
+    session = session_store.get(session_id)
 
     if not session:
         raise HTTPException(
             status_code=404,
-            detail="Session not found"
+            detail="Session not found",
         )
 
     if session.is_complete():
         raise HTTPException(
             status_code=400,
-            detail="Interview is already complete"
+            detail="Interview is already complete",
         )
 
     try:
@@ -183,13 +194,13 @@ def next_question(session_id: str):
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     return {
@@ -203,13 +214,12 @@ def next_question(session_id: str):
 
 @app.get("/interview/{session_id}/report")
 def get_report(session_id: str):
-
-    session = sessions.get(session_id)
+    session = session_store.get(session_id)
 
     if not session:
         raise HTTPException(
             status_code=404,
-            detail="Session not found"
+            detail="Session not found",
         )
 
     try:
@@ -220,7 +230,7 @@ def get_report(session_id: str):
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     return {
@@ -230,15 +240,15 @@ def get_report(session_id: str):
         "learning_plan": learning_plan,
     }
 
+
 @app.get("/interview/{session_id}/analytics")
 def get_analytics(session_id: str):
-
-    session = sessions.get(session_id)
+    session = session_store.get(session_id)
 
     if not session:
         raise HTTPException(
             status_code=404,
-            detail="Session not found"
+            detail="Session not found",
         )
 
     try:
@@ -263,7 +273,7 @@ def get_analytics(session_id: str):
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail=str(exc)
+            detail=str(exc),
         )
 
     return {

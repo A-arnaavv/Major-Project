@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
-from backend.main import app, sessions
+from backend.main import app
+from backend.session_store import session_store
 
 
 client = TestClient(app)
@@ -11,7 +12,7 @@ def setup_function():
     Clear in-memory sessions before every test so tests
     do not interfere with one another.
     """
-    sessions.clear()
+    session_store.clear()
 
 
 def test_root_endpoint():
@@ -133,7 +134,6 @@ def test_complete_interview():
     data = response.json()
 
     assert data["status"] == "completed"
-
     assert data["evaluation"]["overall_score"] == 0
 
     assert "final_report" in data
