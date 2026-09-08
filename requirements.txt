@@ -7,3 +7,5 @@ pytest
 pymupdf
 pymilvus[milvus_lite]
 FlagEmbedding
+
+python-multipart

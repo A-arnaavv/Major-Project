@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from backend.session_store import session_store
 from unittest.mock import patch
+from ai_ml.interview_intelligence.integration_schemas import InterviewContext
 
 client = TestClient(app)
 
@@ -525,3 +526,242 @@ def test_start_interview_strips_session_id_and_topic():
 
     assert session_store.exists("normalized_session")
     assert not session_store.exists("  normalized_session  ")
+
+def test_start_interview_from_resume(monkeypatch):
+    candidate_profile = {
+        "name": "Test Candidate",
+        "technical_skills": ["Python"],
+    }
+
+    context = InterviewContext(
+        topic="Python",
+        difficulty="medium",
+        total_questions=2,
+        resume_context='{"name": "Test Candidate"}',
+        job_role="Backend Engineer",
+        company_context="Example Company",
+        retrieved_context="Candidate has Python experience.",
+    )
+
+    monkeypatch.setattr(
+        "backend.main.process_resume_for_interview",
+        lambda **kwargs: (candidate_profile, context),
+    )
+
+    response = client.post(
+        "/interview/start-from-resume",
+        data={
+            "session_id": "resume-session",
+            "topic": "Python",
+            "difficulty": "medium",
+            "total_questions": "2",
+            "job_role": "Backend Engineer",
+            "company_context": "Example Company",
+        },
+        files={
+            "resume": (
+                "resume.pdf",
+                b"%PDF-1.4 fake resume",
+                "application/pdf",
+            )
+        },
+    )
+
+    print(response.status_code, response.json())
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["session_id"] == "resume-session"
+    assert body["status"] == "started"
+    assert body["candidate_profile"] == candidate_profile
+    assert body["topic"] == "Python"
+    assert body["difficulty"] == "medium"
+    assert "question" in body
+
+
+def test_start_interview_from_resume_rejects_non_pdf():
+    response = client.post(
+        "/interview/start-from-resume",
+        data={
+            "session_id": "bad-resume-session",
+            "topic": "Python",
+        },
+        files={
+            "resume": (
+                "resume.txt",
+                b"not a pdf",
+                "text/plain",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Resume must be a PDF file"
+
+
+def test_start_interview_from_resume_rejects_duplicate_session(
+    monkeypatch,
+):
+    candidate_profile = {
+        "name": "Test Candidate",
+    }
+
+    context = InterviewContext(
+        topic="Python",
+        difficulty="medium",
+        total_questions=1,
+        resume_context="{}",
+    )
+
+    monkeypatch.setattr(
+        "backend.main.process_resume_for_interview",
+        lambda **kwargs: (candidate_profile, context),
+    )
+
+    files = {
+        "resume": (
+            "resume.pdf",
+            b"%PDF-1.4 fake resume",
+            "application/pdf",
+        )
+    }
+
+    data = {
+        "session_id": "duplicate-resume-session",
+        "topic": "Python",
+        "total_questions": "1",
+    }
+
+    first = client.post(
+        "/interview/start-from-resume",
+        data=data,
+        files=files,
+    )
+
+    assert first.status_code == 200
+
+    second = client.post(
+        "/interview/start-from-resume",
+        data=data,
+        files={
+            "resume": (
+                "resume.pdf",
+                b"%PDF-1.4 fake resume",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert second.status_code == 400
+    assert second.json()["detail"] == "Session already exists"
+
+
+def test_start_from_resume_then_answer(monkeypatch):
+    candidate_profile = {
+        "name": "Test Candidate",
+        "technical_skills": ["Python"],
+    }
+
+    context = InterviewContext(
+        topic="Python",
+        difficulty="medium",
+        total_questions=2,
+        resume_context='{"name": "Test Candidate"}',
+        retrieved_context="Python project experience.",
+    )
+
+    monkeypatch.setattr(
+        "backend.main.process_resume_for_interview",
+        lambda **kwargs: (candidate_profile, context),
+    )
+
+    start_response = client.post(
+        "/interview/start-from-resume",
+        data={
+            "session_id": "resume-flow-session",
+            "topic": "Python",
+            "total_questions": "2",
+        },
+        files={
+            "resume": (
+                "resume.pdf",
+                b"%PDF-1.4 fake resume",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert start_response.status_code == 200
+    assert start_response.json()["status"] == "started"
+
+    answer_response = client.post(
+        "/interview/answer",
+        json={
+            "session_id": "resume-flow-session",
+            "candidate_answer": (
+                "Python is a high-level programming language "
+                "used for backend systems, automation, and data work."
+            ),
+        },
+    )
+
+    assert answer_response.status_code == 200
+
+    body = answer_response.json()
+
+    assert body["session_id"] == "resume-flow-session"
+    assert body["status"] == "in_progress"
+    assert "evaluation" in body
+    assert "next_question" in body
+
+def test_start_from_resume_rejects_oversized_pdf(
+    monkeypatch,
+):
+    from backend import main
+
+    monkeypatch.setattr(
+        main,
+        "MAX_RESUME_SIZE_BYTES",
+        10,
+    )
+
+    response = client.post(
+        "/interview/start-from-resume",
+        data={
+            "session_id": "oversized-resume-test",
+            "topic": "Machine Learning",
+            "difficulty": "medium",
+            "total_questions": "2",
+        },
+        files={
+            "resume": (
+                "resume.pdf",
+                b"x" * 11,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 413
+
+    assert (
+        "exceeds maximum size"
+        in response.json()["detail"]
+    )
+
+    session_store.delete(
+        "oversized-resume-test"
+    )
+
+
+def test_answer_whitespace_session_id_rejected():
+    response = client.post(
+        "/interview/answer",
+        json={
+            "session_id": "   ",
+            "candidate_answer": "Some answer",
+        },
+    )
+
+    assert response.status_code == 422

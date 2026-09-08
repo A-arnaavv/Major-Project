@@ -1,121 +1,179 @@
-from pymilvus import MilvusClient, DataType
+import hashlib
+import re
+
+from pymilvus import DataType, MilvusClient
+
 from ai_ml.part1.paths import MILVUS_DB_PATH
+
 
 DB_PATH = str(MILVUS_DB_PATH)
 COLLECTION_NAME = "candidate_profiles"
 
-
-# Connect to Milvus
 client = MilvusClient(DB_PATH)
 
 
-def create_collection():
+def get_collection_name(candidate_id: str | None = None) -> str:
     """
-    Creates the Milvus collection for storing
-    dense and sparse embeddings.
+    Return the Milvus collection used for a candidate.
+
+    When candidate_id is omitted, the legacy collection name is returned
+    for backward compatibility with existing Part 1 tests and utilities.
     """
 
-    # Delete collection if it already exists
-    if client.has_collection(COLLECTION_NAME):
-        print(f"Deleting existing collection: {COLLECTION_NAME}")
-        client.drop_collection(COLLECTION_NAME)
+    if candidate_id is None:
+        return COLLECTION_NAME
 
-    # Create schema
+    candidate_id = candidate_id.strip()
+
+    if not candidate_id:
+        raise ValueError("candidate_id must not be empty")
+
+    safe_id = re.sub(
+        r"[^A-Za-z0-9_]",
+        "_",
+        candidate_id,
+    ).strip("_")
+
+    if not safe_id:
+        safe_id = "candidate"
+
+    digest = hashlib.sha256(
+        candidate_id.encode("utf-8")
+    ).hexdigest()[:12]
+
+    # Keep collection names bounded and collision-resistant.
+    safe_id = safe_id[:40]
+
+    return f"{COLLECTION_NAME}_{safe_id}_{digest}"
+
+
+def create_collection(
+    candidate_id: str | None = None,
+) -> str:
+    """
+    Create a dense + sparse Milvus collection.
+
+    Candidate-specific calls rebuild only that candidate's collection.
+    They never drop another candidate's collection.
+
+    Omitting candidate_id preserves the original Part 1 behaviour.
+    """
+
+    collection_name = get_collection_name(candidate_id)
+
+    if client.has_collection(collection_name):
+        print(
+            f"Deleting existing collection: "
+            f"{collection_name}"
+        )
+        client.drop_collection(collection_name)
+
     schema = client.create_schema(
         auto_id=True,
-        enable_dynamic_field=True
+        enable_dynamic_field=True,
     )
 
-    # Primary key
     schema.add_field(
         field_name="id",
         datatype=DataType.INT64,
-        is_primary=True
+        is_primary=True,
     )
 
-    # Original text chunk
     schema.add_field(
         field_name="text",
         datatype=DataType.VARCHAR,
-        max_length=5000
+        max_length=5000,
     )
 
-    # Dense vector from BGE-M3
     schema.add_field(
         field_name="dense_vector",
         datatype=DataType.FLOAT_VECTOR,
-        dim=1024
+        dim=1024,
     )
 
-    # Sparse vector from BGE-M3
     schema.add_field(
         field_name="sparse_vector",
-        datatype=DataType.SPARSE_FLOAT_VECTOR
+        datatype=DataType.SPARSE_FLOAT_VECTOR,
     )
 
-    # Create collection
     client.create_collection(
-        collection_name=COLLECTION_NAME,
-        schema=schema
+        collection_name=collection_name,
+        schema=schema,
     )
 
     print(
-        f"Hybrid collection '{COLLECTION_NAME}' "
+        f"Hybrid collection '{collection_name}' "
         f"created successfully!"
     )
 
+    return collection_name
 
-def create_indexes():
+
+def create_indexes(
+    candidate_id: str | None = None,
+) -> None:
     """
-    Creates indexes for dense and sparse vectors.
+    Create dense and sparse indexes for a candidate collection.
     """
+
+    collection_name = get_collection_name(candidate_id)
 
     index_params = client.prepare_index_params()
 
-    # Dense vector index
     index_params.add_index(
         field_name="dense_vector",
         index_type="FLAT",
-        metric_type="COSINE"
+        metric_type="COSINE",
     )
 
-    # Sparse vector index
     index_params.add_index(
         field_name="sparse_vector",
         index_type="SPARSE_INVERTED_INDEX",
-        metric_type="IP"
+        metric_type="IP",
     )
 
-    # Create indexes
     client.create_index(
-        collection_name=COLLECTION_NAME,
-        index_params=index_params
+        collection_name=collection_name,
+        index_params=index_params,
     )
 
-    print("Dense and sparse indexes created successfully!")
+    print(
+        f"Dense and sparse indexes created successfully "
+        f"for '{collection_name}'!"
+    )
 
 
-def insert_documents(chunks, dense_embeddings, sparse_embeddings):
+def insert_documents(
+    chunks,
+    dense_embeddings,
+    sparse_embeddings,
+    candidate_id: str | None = None,
+):
     """
-    Inserts text chunks along with dense and sparse
-    embeddings into the Milvus collection.
+    Insert text chunks and embeddings into a candidate collection.
     """
+
+    collection_name = get_collection_name(candidate_id)
 
     data = []
 
     for i, chunk in enumerate(chunks):
-
-        data.append({
-            "text": chunk,
-            "dense_vector": dense_embeddings[i],
-            "sparse_vector": sparse_embeddings[i]
-        })
+        data.append(
+            {
+                "text": chunk,
+                "dense_vector": dense_embeddings[i],
+                "sparse_vector": sparse_embeddings[i],
+            }
+        )
 
     result = client.insert(
-        collection_name=COLLECTION_NAME,
-        data=data
+        collection_name=collection_name,
+        data=data,
     )
 
-    print(f"{len(chunks)} documents inserted successfully!")
+    print(
+        f"{len(chunks)} documents inserted successfully "
+        f"into '{collection_name}'!"
+    )
 
     return result
