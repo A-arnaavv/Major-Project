@@ -566,8 +566,6 @@ def test_start_interview_from_resume(monkeypatch):
             )
         },
     )
-
-    print(response.status_code, response.json())
     assert response.status_code == 200
 
     body = response.json()
